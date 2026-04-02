@@ -26,7 +26,20 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
         run: |
+          echo "=========================================="
           echo "Current directory: $(pwd)"
-          echo "Files in generated_questions:"
-          ls -la generated_questions/
+          echo "=========================================="
+          echo "Repository contents:"
+          ls -la
+          echo "=========================================="
+          echo "Checking generated_questions directory:"
+          if [ -d "generated_questions" ]; then
+            echo "Directory exists"
+            ls -la generated_questions/
+          else
+            echo "ERROR: generated_questions directory does NOT exist!"
+            exit 1
+          fi
+          echo "=========================================="
+          echo "Running Python script..."
           python scripts/send_daily_email.py

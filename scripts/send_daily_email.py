@@ -7,6 +7,7 @@ Fetches a random question from generated_questions/ and sends via SMTP.
 
 import json
 import os
+import sys
 import smtplib
 import random
 from email.mime.multipart import MIMEMultipart
