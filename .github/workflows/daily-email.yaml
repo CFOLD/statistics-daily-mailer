@@ -21,7 +21,9 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install markdown
+        run: |
+          pip cache purge
+          pip install --no-cache-dir markdown
 
       - name: Send email
         env:
