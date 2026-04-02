@@ -8,15 +8,15 @@ Fetches a random question from generated_questions/ and sends via SMTP.
 import json
 import os
 import smtplib
-import sys
 import random
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from datetime import datetime
 
-# Configuration (relative to repo root)
-QUESTIONS_DIR = Path('generated_questions')
+# Configuration - use absolute path based on script location
+SCRIPT_DIR = Path(__file__).parent.parent
+QUESTIONS_DIR = SCRIPT_DIR / 'generated_questions'
 SMTP_HOST = os.getenv('SMTP_HOST')
 SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
 SMTP_USERNAME = os.getenv('SMTP_USERNAME')
@@ -26,12 +26,7 @@ EMAIL_RECIPIENTS = os.getenv('EMAIL_RECIPIENTS', '').split(',')
 
 def get_random_question() -> dict:
     """Get a random question from the generated_questions directory."""
-    sys.stderr.write(f"DEBUG: Current dir = {os.getcwd()}\n")
-    sys.stderr.write(f"DEBUG: QUESTIONS_DIR = {QUESTIONS_DIR}\n")
-    sys.stderr.write(f"DEBUG: QUESTIONS_DIR exists = {QUESTIONS_DIR.exists()}\n")
-    sys.stderr.write(f"DEBUG: QUESTIONS_DIR is_dir = {QUESTIONS_DIR.is_dir()}\n")
     md_files = list(QUESTIONS_DIR.glob('*.md'))
-    sys.stderr.write(f"DEBUG: Found {len(md_files)} files: {[f.name for f in md_files]}\n")
     if not md_files:
         raise FileNotFoundError("No question files found")
 
