@@ -8,6 +8,7 @@ Fetches a random question from generated_questions/ and sends via SMTP.
 import json
 import os
 import smtplib
+import sys
 import random
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -25,12 +26,12 @@ EMAIL_RECIPIENTS = os.getenv('EMAIL_RECIPIENTS', '').split(',')
 
 def get_random_question() -> dict:
     """Get a random question from the generated_questions directory."""
-    print(f"DEBUG: Current dir = {os.getcwd()}")
-    print(f"DEBUG: QUESTIONS_DIR = {QUESTIONS_DIR}")
-    print(f"DEBUG: QUESTIONS_DIR exists = {QUESTIONS_DIR.exists()}")
-    print(f"DEBUG: QUESTIONS_DIR is_dir = {QUESTIONS_DIR.is_dir()}")
+    sys.stderr.write(f"DEBUG: Current dir = {os.getcwd()}\n")
+    sys.stderr.write(f"DEBUG: QUESTIONS_DIR = {QUESTIONS_DIR}\n")
+    sys.stderr.write(f"DEBUG: QUESTIONS_DIR exists = {QUESTIONS_DIR.exists()}\n")
+    sys.stderr.write(f"DEBUG: QUESTIONS_DIR is_dir = {QUESTIONS_DIR.is_dir()}\n")
     md_files = list(QUESTIONS_DIR.glob('*.md'))
-    print(f"DEBUG: Found {len(md_files)} files: {[f.name for f in md_files]}")
+    sys.stderr.write(f"DEBUG: Found {len(md_files)} files: {[f.name for f in md_files]}\n")
     if not md_files:
         raise FileNotFoundError("No question files found")
 
