@@ -51,10 +51,11 @@ def parse_markdown_question(content: str) -> dict:
         'date': ''
     }
 
-    # Split by '---' delimiter
-    parts = re.split(r'\n---\n', content)
+    # Split by '---' delimiter (flexible newlines)
+    parts = re.split(r'\n\s*---\s*\n', content)
 
     for part in parts:
+        part = part.strip()
         if part.startswith('## 문항'):
             sections['question'] = part.replace('## 문항', '').strip()
         elif part.startswith('## 해설'):
@@ -161,8 +162,8 @@ def create_email_html(question: dict) -> str:
     explanation_html = markdown_to_html(sections['explanation'])
     purpose_html = markdown_to_html(sections['purpose'])
 
-    # Email-safe inline styles
-    # Note: Email clients have limited CSS support, so we use both <style> and inline
+    # Gothic font family for Korean
+    font_sans = "'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'Helvetica Neue', Arial, sans-serif"
 
     return f"""<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -172,7 +173,6 @@ def create_email_html(question: dict) -> str:
   <meta name="x-apple-disable-message-reformatting" />
   <title>통계분석 일일 문제</title>
   <style type="text/css">
-    /* Reset styles */
     body, table, td, p, a, li, blockquote {{
       -ms-text-size-adjust: 100%;
       -webkit-text-size-adjust: 100%;
@@ -197,16 +197,32 @@ def create_email_html(question: dict) -> str:
     p {{
       margin: 0 0 16px 0;
     }}
-    /* iOS blue links */
+    /* Table styles */
+    table.data-table, table.data-table td, table.data-table th {{
+      border: 1px solid #cbd5e0 !important;
+      border-collapse: collapse !important;
+    }}
+    table.data-table {{
+      width: 100% !important;
+      mso-table-lspace: 0pt !important;
+      mso-table-rspace: 0pt !important;
+    }}
+    table.data-table th {{
+      background-color: #e2e8f0 !important;
+      font-weight: bold !important;
+      text-align: left !important;
+      padding: 8px 12px !important;
+    }}
+    table.data-table td {{
+      padding: 8px 12px !important;
+    }}
     a {{
       color: #2563eb;
     }}
-    /* Remove iOS greying */
     u+[b] a {{
       color: inherit;
       text-decoration: none;
     }}
-    /* Media queries */
     @media screen and (max-width: 600px) {{
       .email-container {{
         width: 100% !important;
@@ -218,21 +234,19 @@ def create_email_html(question: dict) -> str:
     }}
   </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: Georgia, 'Times New Roman', Times, serif;">
+<body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: {font_sans};">
 
-  <!-- Center wrapper -->
   <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f5f5f5;">
     <tr>
       <td align="center" style="padding: 20px 0;">
 
-        <!-- Main container -->
         <table class="email-container" role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" style="background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 600px; width: 100%;">
 
           <!-- Header -->
           <tr>
             <td style="background: linear-gradient(135deg, #4A90A4 0%, #357A9A 100%); padding: 32px 28px; text-align: left;">
-              <h1 style="margin: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 26px; font-weight: 600; color: #ffffff; line-height: 1.3;">📊 통계분석 일일 문제</h1>
-              <p style="margin: 10px 0 0 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; color: rgba(255,255,255,0.9);">{date_str}</p>
+              <h1 style="margin: 0; font-family: {font_sans}; font-size: 26px; font-weight: 600; color: #ffffff; line-height: 1.3;">📊 통계분석 일일 문제</h1>
+              <p style="margin: 10px 0 0 0; font-family: {font_sans}; font-size: 14px; color: rgba(255,255,255,0.9);">{date_str}</p>
             </td>
           </tr>
 
@@ -244,8 +258,8 @@ def create_email_html(question: dict) -> str:
               <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafb; border: 1px solid #e1e8ed; border-radius: 8px; margin-bottom: 40px;">
                 <tr>
                   <td style="padding: 28px 24px;">
-                    <h2 style="margin: 0 0 20px 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 18px; font-weight: 600; color: #2c5282; padding-bottom: 14px; border-bottom: 2px solid #bed6e6;">문항</h2>
-                    <div style="font-size: 16px; line-height: 1.8; color: #334155;">
+                    <h2 style="margin: 0 0 20px 0; font-family: {font_sans}; font-size: 18px; font-weight: 600; color: #2c5282; padding-bottom: 14px; border-bottom: 2px solid #bed6e6;">문항</h2>
+                    <div style="font-family: {font_sans}; font-size: 16px; line-height: 1.8; color: #334155;">
                       {question_html}
                     </div>
                   </td>
@@ -255,7 +269,7 @@ def create_email_html(question: dict) -> str:
               <!-- Large spacer (1000px) -->
               <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" height="1000" style="background: linear-gradient(to bottom, #f5f5f5, rgba(245,245,245,0.3)); margin: 40px 0;">
                 <tr>
-                  <td align="center" valign="middle" style="color: #94a3b8; font-size: 15px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
+                  <td align="center" valign="middle" style="color: #94a3b8; font-size: 15px; font-family: {font_sans};">
                     <p style="margin: 0 0 10px 0; font-size: 16px; font-weight: 600;">📝 아래로 스크롤하여 해설 확인</p>
                     <p style="margin: 0; font-size: 13px; color: #64748b;">(먼저 문제를 풀어보세요!)</p>
                   </td>
@@ -266,8 +280,8 @@ def create_email_html(question: dict) -> str:
               <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f0f7ff; border: 1px solid #d1e8ff; border-radius: 8px; margin-bottom: 16px;">
                 <tr>
                   <td style="padding: 28px 24px;">
-                    <h2 style="margin: 0 0 20px 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 18px; font-weight: 600; color: #2b6cb0; padding-bottom: 14px; border-bottom: 2px solid #93c5fd;">해설</h2>
-                    <div style="font-size: 15px; line-height: 1.8; color: #334155;">
+                    <h2 style="margin: 0 0 20px 0; font-family: {font_sans}; font-size: 18px; font-weight: 600; color: #2b6cb0; padding-bottom: 14px; border-bottom: 2px solid #93c5fd;">해설</h2>
+                    <div style="font-family: {font_sans}; font-size: 15px; line-height: 1.8; color: #334155;">
                       {explanation_html}
                     </div>
                   </td>
@@ -278,8 +292,8 @@ def create_email_html(question: dict) -> str:
               <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f9fbf5; border: 1px solid #e8f0d8; border-radius: 8px;">
                 <tr>
                   <td style="padding: 28px 24px;">
-                    <h2 style="margin: 0 0 20px 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 18px; font-weight: 600; color: #276749; padding-bottom: 14px; border-bottom: 2px solid #9ae6b4;">출제 의도</h2>
-                    <div style="font-size: 14px; line-height: 1.8; color: #4a5568;">
+                    <h2 style="margin: 0 0 20px 0; font-family: {font_sans}; font-size: 18px; font-weight: 600; color: #276749; padding-bottom: 14px; border-bottom: 2px solid #9ae6b4;">출제 의도</h2>
+                    <div style="font-family: {font_sans}; font-size: 14px; line-height: 1.8; color: #4a5568;">
                       {purpose_html}
                     </div>
                   </td>
@@ -289,15 +303,6 @@ def create_email_html(question: dict) -> str:
             </td>
           </tr>
 
-        </table>
-
-        <!-- Footer -->
-        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" style="max-width: 600px; width: 100%; margin-top: 20px;">
-          <tr>
-            <td align="center" style="padding: 20px; color: #94a3b8; font-size: 12px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
-              <p style="margin: 0;">통계분석 일일 문제 | <a href="https://github.com/CFOLD/statistics-questions" style="color: #64748b; text-decoration: underline;">더 많은 문제 보기</a></p>
-            </td>
-          </tr>
         </table>
 
       </td>
