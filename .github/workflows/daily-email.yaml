@@ -20,6 +20,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install dependencies
+        run: pip install markdown
+
       - name: Send email
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
