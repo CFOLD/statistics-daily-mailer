@@ -3,7 +3,7 @@
 Daily Statistics Question Email Sender
 
 Fetches a random question from generated_questions/, parses Markdown,
-converts to HTML with MathJax for LaTeX rendering, and sends via SMTP.
+converts to HTML with HTML math entities (no JS), and sends via SMTP.
 """
 
 import os
@@ -61,17 +61,96 @@ def parse_markdown_question(content: str) -> dict:
     return sections
 
 
+def latex_to_html(latex: str) -> str:
+    """Convert LaTeX math to HTML entities."""
+    # Greek letters
+    replacements = {
+        'alpha': '&alpha;', 'beta': '&beta;', 'gamma': '&gamma;',
+        'delta': '&delta;', 'epsilon': '&epsilon;', 'zeta': '&zeta;',
+        'eta': '&eta;', 'theta': '&theta;', 'lambda': '&lambda;',
+        'mu': '&mu;', 'xi': '&xi;', 'pi': '&pi;', 'rho': '&rho;',
+        'sigma': '&sigma;', 'tau': '&tau;', 'phi': '&phi;',
+        'chi': '&chi;', 'psi': '&psi;', 'omega': '&omega;',
+        'Delta': '&Delta;', 'Sigma': '&Sigma;', 'Pi': '&Pi;',
+        'Phi': '&Phi;', 'Omega': '&Omega;',
+        # Symbols
+        'times': '&times;', 'div': '&divide;', 'pm': '&plusmn;',
+        'approx': '&approx;', 'leq': '&le;', 'geq': '&ge;',
+        'neq': '&ne;', 'infty': '&infin;', 'sqrt': '&radic;',
+        'sum': '&sum;', 'prod': '&prod;', 'int': '&int;',
+        'partial': '&part;', 'prime': '&prime;',
+        'rightarrow': '&rarr;', 'leftarrow': '&larr;',
+        'Leftrightarrow': '&harr;', 'equiv': '&equiv;',
+        'in': '&isin;', 'subset': '&sub;', 'supset': '&sup;',
+        'cup': '&cup;', 'cap': '&cap;', 'emptyset': '&empty;',
+    }
+
+    result = latex
+    for key, value in replacements.items():
+        result = result.replace(key, value)
+
+    # Superscripts: ^{...} or ^...
+    result = re.sub(r'\^\{([^}]*)\}', r'<sup>\1</sup>', result)
+    result = re.sub(r'\^([^ }\{])', r'<sup>\1</sup>', result)
+
+    # Subscripts: _{...} or _...
+    result = re.sub(r'_{([^}]*)\}', r'<sub>\1</sub>', result)
+    result = re.sub(r'_([^ }\{])', r'<sub>\1</sub>', result)
+
+    return result
+
+
+def convert_math_to_html(content: str) -> str:
+    """Convert LaTeX math expressions to HTML, keeping LaTeX for reference."""
+    # Inline math: $...$ → show HTML + LaTeX
+    def replace_inline(match):
+        latex = match.group(1)
+        html = latex_to_html(latex)
+        return f'<code class="math">{html} <span class="latex">(${latex}$)</span></code>'
+
+    # Display math: $$...$$ → show HTML + LaTeX
+    def replace_display(match):
+        latex = match.group(1)
+        html = latex_to_html(latex)
+        return f'<div class="math-display"><code>{html} <span class="latex">($${latex}$$)</span></code></div>'
+
+    result = content
+    result = re.sub(r'\$\$([^$]+)\$\$', replace_display, result)
+    result = re.sub(r'\$([^$]+)\$', replace_inline, result)
+
+    return result
+
+
 def markdown_to_html(md_content: str) -> str:
-    """Convert Markdown to HTML (preserves LaTeX for MathJax)."""
-    return markdown.markdown(md_content, extensions=['fenced_code', 'tables'])
+    """Convert Markdown to HTML (preserves math for conversion)."""
+    # Temporarily hide math expressions
+    hidden_math = []
+    def hide_math(match):
+        hidden_math.append(match.group(0))
+        return f'__MATH_{len(hidden_math)-1}__'
+
+    # Hide math first
+    temp_content = re.sub(r'\$[\$\w\W]*?\$', hide_math, md_content)
+
+    # Convert to HTML
+    html = markdown.markdown(temp_content, extensions=['fenced_code', 'tables'])
+
+    # Restore math and convert
+    for i, math in enumerate(hidden_math):
+        html = html.replace(f'__MATH_{i}__', math)
+
+    # Convert math to HTML
+    html = convert_math_to_html(html)
+
+    return html
 
 
 def create_email_html(question: dict) -> str:
-    """Create HTML email with collapsible sections and MathJax."""
+    """Create HTML email with large spacing between question and explanation."""
     date_str = datetime.now().strftime('%Y-%m-%d')
     sections = parse_markdown_question(question['content'])
 
-    # Convert markdown to HTML
+    # Convert markdown to HTML with math conversion
     question_html = markdown_to_html(sections['question'])
     explanation_html = markdown_to_html(sections['explanation'])
     purpose_html = markdown_to_html(sections['purpose'])
@@ -81,20 +160,6 @@ def create_email_html(question: dict) -> str:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- MathJax for LaTeX rendering -->
-  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-  <script id="MathJax-script" async
-    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
-  </script>
-  <script>
-    MathJax = {{
-      tex: {{
-        inlineMath: [['$', '$'], ['\\(', '\\)']],
-        displayMath: [['$$', '$$'], ['\\[', '\\]]]
-      }}
-    }};
-  </script>
 
   <style>
     body {{
@@ -153,38 +218,21 @@ def create_email_html(question: dict) -> str:
     .question-section p:last-child {{
       margin-bottom: 0;
     }}
-    .explanation-wrapper {{
-      margin-bottom: 60px;
-    }}
-    .explanation-details {{
-      width: 100%;
-    }}
-    .explanation-summary {{
-      background: #e3f2fd;
-      border: 2px dashed #2196f3;
-      border-radius: 8px;
-      padding: 16px 20px;
-      font-size: 16px;
-      font-weight: 600;
-      color: #1976d2;
-      cursor: pointer;
-      list-style: none;
-      transition: all 0.3s ease;
-      text-align: center;
-    }}
-    .explanation-summary:hover {{
-      background: #bbdefb;
-      border-color: #1976d2;
-    }}
-    .explanation-summary::-webkit-details-marker {{
-      display: none;
+    .spacer {{
+      height: 1000px;
+      background: linear-gradient(to bottom, #f5f5f5, transparent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ccc;
+      font-size: 14px;
     }}
     .explanation-section {{
       background: #f0f7ff;
       border: 1px solid #d1e8ff;
       border-radius: 10px;
       padding: 24px 22px;
-      margin-top: 20px;
+      margin-bottom: 20px;
     }}
     .explanation-section h2 {{
       color: #2b6cb0;
@@ -202,38 +250,11 @@ def create_email_html(question: dict) -> str:
     .explanation-section p:last-child {{
       margin-bottom: 0;
     }}
-    .purpose-wrapper {{
-      margin-bottom: 60px;
-    }}
-    .purpose-details {{
-      width: 100%;
-    }}
-    .purpose-summary {{
-      background: #e8f5e9;
-      border: 2px dashed #4caf50;
-      border-radius: 8px;
-      padding: 16px 20px;
-      font-size: 16px;
-      font-weight: 600;
-      color: #388e3c;
-      cursor: pointer;
-      list-style: none;
-      transition: all 0.3s ease;
-      text-align: center;
-    }}
-    .purpose-summary:hover {{
-      background: #c8e6c9;
-      border-color: #388e3c;
-    }}
-    .purpose-summary::-webkit-details-marker {{
-      display: none;
-    }}
     .purpose-section {{
       background: #f9fbf5;
       border: 1px solid #e8f0d8;
       border-radius: 10px;
       padding: 24px 22px;
-      margin-top: 20px;
     }}
     .purpose-section h2 {{
       color: #276749;
@@ -256,6 +277,22 @@ def create_email_html(question: dict) -> str:
       padding: 3px 8px;
       border-radius: 5px;
       font-size: 0.9em;
+    }}
+    .math {{
+      background: #e8f5e9;
+      border: 1px solid #c8e6c9;
+    }}
+    .math-display {{
+      text-align: center;
+      padding: 16px;
+      margin: 12px 0;
+      background: #f1f8f4;
+      border-radius: 8px;
+    }}
+    .latex {{
+      font-size: 0.8em;
+      color: #999;
+      font-style: italic;
     }}
     pre {{
       background: #1a202c;
@@ -314,24 +351,21 @@ def create_email_html(question: dict) -> str:
         {question_html}
       </div>
 
-      <div class="explanation-wrapper">
-        <details class="explanation-details">
-          <summary class="explanation-summary">📝 해설 보기 (click to reveal)</summary>
-          <div class="explanation-section">
-            <h2>해설</h2>
-            <div class="explanation-content">{explanation_html}</div>
-          </div>
-        </details>
+      <div class="spacer">
+        <div>
+          <p>📝 아래로 스크롤하여 해설 확인</p>
+          <p style="font-size: 12px;">(먼저 문제를 풀어보세요!)</p>
+        </div>
       </div>
 
-      <div class="purpose-wrapper">
-        <details class="purpose-details">
-          <summary class="purpose-summary">💡 출제 의도 보기 (click to reveal)</summary>
-          <div class="purpose-section">
-            <h2>출제 의도</h2>
-            <div class="purpose-content">{purpose_html}</div>
-          </div>
-        </details>
+      <div class="explanation-section">
+        <h2>해설</h2>
+        <div class="explanation-content">{explanation_html}</div>
+      </div>
+
+      <div class="purpose-section">
+        <h2>출제 의도</h2>
+        <div class="purpose-content">{purpose_html}</div>
       </div>
     </div>
   </div>
