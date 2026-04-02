@@ -25,7 +25,12 @@ EMAIL_RECIPIENTS = os.getenv('EMAIL_RECIPIENTS', '').split(',')
 
 def get_random_question() -> dict:
     """Get a random question from the generated_questions directory."""
+    print(f"DEBUG: Current dir = {os.getcwd()}")
+    print(f"DEBUG: QUESTIONS_DIR = {QUESTIONS_DIR}")
+    print(f"DEBUG: QUESTIONS_DIR exists = {QUESTIONS_DIR.exists()}")
+    print(f"DEBUG: QUESTIONS_DIR is_dir = {QUESTIONS_DIR.is_dir()}")
     md_files = list(QUESTIONS_DIR.glob('*.md'))
+    print(f"DEBUG: Found {len(md_files)} files: {[f.name for f in md_files]}")
     if not md_files:
         raise FileNotFoundError("No question files found")
 
