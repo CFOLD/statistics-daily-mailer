@@ -14,9 +14,8 @@ from email.mime.text import MIMEText
 from pathlib import Path
 from datetime import datetime
 
-# Configuration - use absolute path based on script location
-SCRIPT_DIR = Path(__file__).parent.parent
-QUESTIONS_DIR = SCRIPT_DIR / 'generated_questions'
+# Configuration - use working directory (repo root)
+QUESTIONS_DIR = Path.cwd() / 'generated_questions'
 SMTP_HOST = os.getenv('SMTP_HOST')
 SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
 SMTP_USERNAME = os.getenv('SMTP_USERNAME')
@@ -62,10 +61,6 @@ def create_email_html(question: dict) -> str:
 
   <div class="content">
     {question['content']}
-  </div>
-
-  <div class="footer">
-    <p>더 많은 문제는 <a href="https://github.com/CFOLD/statistics-questions">statistics-questions 저장소</a>에서 확인하세요.</p>
   </div>
 </body>
 </html>
