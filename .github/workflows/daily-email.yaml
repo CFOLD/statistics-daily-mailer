@@ -18,6 +18,7 @@ jobs:
           python-version: '3.11'
 
       - name: Send daily email
+        working-directory: ${{ github.workspace }}
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
@@ -25,4 +26,7 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
         run: |
+          echo "Current directory: $(pwd)"
+          echo "Files in generated_questions:"
+          ls -la generated_questions/
           python scripts/send_daily_email.py
