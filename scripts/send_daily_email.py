@@ -2,17 +2,19 @@
 """
 Daily Statistics Question Email Sender
 
-Fetches a random question from generated_questions/ and sends via SMTP.
-Converts Markdown to HTML with styled sections for email display.
+Fetches a random question from generated_questions/, parses Markdown,
+converts to HTML with MathJax for LaTeX rendering, and sends via SMTP.
 """
 
 import os
+import re
 import smtplib
 import random
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from datetime import datetime
+import markdown
 
 # Configuration - use working directory (repo root)
 QUESTIONS_DIR = Path.cwd() / 'generated_questions'
@@ -25,27 +27,75 @@ EMAIL_RECIPIENTS = os.getenv('EMAIL_RECIPIENTS', '').split(',')
 
 def get_random_question() -> dict:
     """Get a random question from the generated_questions directory."""
-    html_files = list(QUESTIONS_DIR.glob('*.html'))
-    if not html_files:
+    md_files = list(QUESTIONS_DIR.glob('*.md'))
+    if not md_files:
         raise FileNotFoundError("No question files found")
 
-    selected_file = random.choice(html_files)
+    selected_file = random.choice(md_files)
     content = selected_file.read_text(encoding='utf-8')
     return {'file': selected_file.name, 'content': content}
 
 
-def create_email_html(question: dict) -> str:
-    """Create HTML email body with the question."""
-    date_str = datetime.now().strftime('%Y-%m-%d')
+def parse_markdown_question(content: str) -> dict:
+    """Parse markdown question into sections (question, explanation, purpose)."""
+    sections = {
+        'question': '',
+        'explanation': '',
+        'purpose': '',
+        'date': ''
+    }
 
-    # Use HTML content directly (question files are .html)
-    content_html = question['content']
+    # Split by '---' delimiter
+    parts = re.split(r'\n---\n', content)
+
+    for part in parts:
+        if part.startswith('## 문항'):
+            sections['question'] = part.replace('## 문항', '').strip()
+        elif part.startswith('## 해설'):
+            sections['explanation'] = part.replace('## 해설', '').strip()
+        elif part.startswith('## 출제 의도'):
+            sections['purpose'] = part.replace('## 출제 의도', '').strip()
+        elif 'Generated on:' in part:
+            sections['date'] = part.strip()
+
+    return sections
+
+
+def markdown_to_html(md_content: str) -> str:
+    """Convert Markdown to HTML (preserves LaTeX for MathJax)."""
+    return markdown.markdown(md_content, extensions=['fenced_code', 'tables'])
+
+
+def create_email_html(question: dict) -> str:
+    """Create HTML email with collapsible sections and MathJax."""
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    sections = parse_markdown_question(question['content'])
+
+    # Convert markdown to HTML
+    question_html = markdown_to_html(sections['question'])
+    explanation_html = markdown_to_html(sections['explanation'])
+    purpose_html = markdown_to_html(sections['purpose'])
 
     return f"""<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- MathJax for LaTeX rendering -->
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+  </script>
+  <script>
+    MathJax = {{
+      tex: {{
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]]]
+      }}
+    }};
+  </script>
+
   <style>
     body {{
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -87,15 +137,24 @@ def create_email_html(question: dict) -> str:
       padding: 24px 22px;
       margin-bottom: 80px;
     }}
-    .explanation-section {{
-      background: #f0f7ff;
-      border: 1px solid #d1e8ff;
-      border-radius: 10px;
-      padding: 24px 22px;
-      margin-top: 40px;
+    .question-section h2 {{
+      color: #2c5282;
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0 0 16px 0;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #bed6e6;
+    }}
+    .question-section p {{
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      line-height: 1.8;
+    }}
+    .question-section p:last-child {{
+      margin-bottom: 0;
     }}
     .explanation-wrapper {{
-      margin-bottom: 80px;
+      margin-bottom: 60px;
     }}
     .explanation-details {{
       width: 100%;
@@ -104,38 +163,28 @@ def create_email_html(question: dict) -> str:
       background: #e3f2fd;
       border: 2px dashed #2196f3;
       border-radius: 8px;
-      padding: 18px 20px;
+      padding: 16px 20px;
       font-size: 16px;
       font-weight: 600;
       color: #1976d2;
       cursor: pointer;
       list-style: none;
       transition: all 0.3s ease;
+      text-align: center;
     }}
     .explanation-summary:hover {{
       background: #bbdefb;
       border-color: #1976d2;
     }}
-    .explanation-summary::before {{
-      content: '⬇️ ';
-      margin-right: 8px;
+    .explanation-summary::-webkit-details-marker {{
+      display: none;
     }}
-    .explanation-details[open] .explanation-summary::before {{
-      content: '⬆️ ';
-    }}
-    .purpose-section {{
-      background: #f9fbf5;
-      border: 1px solid #e8f0d8;
+    .explanation-section {{
+      background: #f0f7ff;
+      border: 1px solid #d1e8ff;
       border-radius: 10px;
       padding: 24px 22px;
-    }}
-    .question-section h2 {{
-      color: #2c5282;
-      font-size: 18px;
-      font-weight: 600;
-      margin: 0 0 16px 0;
-      padding-bottom: 12px;
-      border-bottom: 2px solid #bed6e6;
+      margin-top: 20px;
     }}
     .explanation-section h2 {{
       color: #2b6cb0;
@@ -145,19 +194,6 @@ def create_email_html(question: dict) -> str:
       padding-bottom: 12px;
       border-bottom: 2px solid #93c5fd;
     }}
-    .purpose-section h2 {{
-      color: #276749;
-      font-size: 18px;
-      font-weight: 600;
-      margin: 0 0 16px 0;
-      padding-bottom: 12px;
-      border-bottom: 2px solid #9ae6b4;
-    }}
-    .question-section p {{
-      margin: 0;
-      font-size: 16px;
-      line-height: 1.8;
-    }}
     .explanation-section p {{
       margin: 0 0 12px 0;
       font-size: 15px;
@@ -165,6 +201,47 @@ def create_email_html(question: dict) -> str:
     }}
     .explanation-section p:last-child {{
       margin-bottom: 0;
+    }}
+    .purpose-wrapper {{
+      margin-bottom: 60px;
+    }}
+    .purpose-details {{
+      width: 100%;
+    }}
+    .purpose-summary {{
+      background: #e8f5e9;
+      border: 2px dashed #4caf50;
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #388e3c;
+      cursor: pointer;
+      list-style: none;
+      transition: all 0.3s ease;
+      text-align: center;
+    }}
+    .purpose-summary:hover {{
+      background: #c8e6c9;
+      border-color: #388e3c;
+    }}
+    .purpose-summary::-webkit-details-marker {{
+      display: none;
+    }}
+    .purpose-section {{
+      background: #f9fbf5;
+      border: 1px solid #e8f0d8;
+      border-radius: 10px;
+      padding: 24px 22px;
+      margin-top: 20px;
+    }}
+    .purpose-section h2 {{
+      color: #276749;
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0 0 16px 0;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #9ae6b4;
     }}
     .purpose-section p {{
       margin: 0;
@@ -210,17 +287,17 @@ def create_email_html(question: dict) -> str:
       padding: 10px 12px;
       border: 1px solid #e2e8f0;
     }}
+    ul, ol {{
+      margin: 0 0 12px 0;
+      padding-left: 24px;
+    }}
+    ul li, ol li {{
+      margin: 6px 0;
+    }}
     hr {{
       border: none;
       border-top: 2px solid #e2e8f0;
       margin: 24px 0;
-    }}
-    .math {{
-      font-family: 'Times New Roman', serif;
-      font-style: italic;
-      background: #f7fafc;
-      padding: 2px 6px;
-      border-radius: 3px;
     }}
   </style>
 </head>
@@ -232,7 +309,30 @@ def create_email_html(question: dict) -> str:
     </div>
 
     <div class="content">
-      {content_html}
+      <div class="question-section">
+        <h2>문항</h2>
+        {question_html}
+      </div>
+
+      <div class="explanation-wrapper">
+        <details class="explanation-details">
+          <summary class="explanation-summary">📝 해설 보기 (click to reveal)</summary>
+          <div class="explanation-section">
+            <h2>해설</h2>
+            <div class="explanation-content">{explanation_html}</div>
+          </div>
+        </details>
+      </div>
+
+      <div class="purpose-wrapper">
+        <details class="purpose-details">
+          <summary class="purpose-summary">💡 출제 의도 보기 (click to reveal)</summary>
+          <div class="purpose-section">
+            <h2>출제 의도</h2>
+            <div class="purpose-content">{purpose_html}</div>
+          </div>
+        </details>
+      </div>
     </div>
   </div>
 </body>
