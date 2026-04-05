@@ -99,7 +99,7 @@ def md_to_html(md: str) -> str:
         html = md_renderer.render(md)
     else:
         parts = [p.strip() for p in md.split('\n\n') if p.strip()]
-        html = ''.join(f"<p>{p.replace('\n', '<br/>')}</p>" for p in parts)
+        html = ''.join("<p>" + p.replace("\n", "<br/>") + "</p>" for p in parts)
     if BeautifulSoup:
         soup = BeautifulSoup(f"<div>{html}</div>", "html.parser")
         for p in soup.find_all():
