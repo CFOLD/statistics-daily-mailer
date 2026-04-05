@@ -32,7 +32,7 @@ except Exception:
 
 BASE = Path(__file__).resolve().parents[1]
 TEMPLATE_PATH = BASE / "templates" / "daily_email.html"
-QUESTIONS_DIR = BASE / "generated_questions"
+QUESTIONS_DIR = BASE / "questions"
 
 # Visual defaults for Statistics
 DEFAULTS = {

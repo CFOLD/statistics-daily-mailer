@@ -4,7 +4,7 @@ Private GitHub repository for sending daily statistics questions by email with G
 
 ## What it does
 
-- Finds today's dated question file from `generated_questions/` when available
+- Finds today's dated question file from `questions/` when available
 - Falls back to the most recent question file if no file matches today's date
 - Converts markdown to email-friendly HTML using the shared email template format
 - Sends via standard SMTP using shared secret names
@@ -12,7 +12,7 @@ Private GitHub repository for sending daily statistics questions by email with G
 
 ## Repository layout
 
-- `generated_questions/`: statistics question markdown files
+- `questions/`: statistics question markdown files
 - `templates/daily_email.html`: shared email template
 - `scripts/send_daily_email.py`: email sender script
 - `.github/workflows/daily-email.yml`: GitHub Actions workflow
@@ -45,7 +45,7 @@ You can manually trigger the workflow from the Actions tab.
 
 ## Adding question files
 
-Place question markdown files in the `generated_questions/` directory.
+Place question markdown files in the `questions/` directory.
 
 Recommended naming pattern:
 
