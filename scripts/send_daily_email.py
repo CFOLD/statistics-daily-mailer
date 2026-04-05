@@ -479,15 +479,27 @@ def create_email_html(question: dict) -> str:
     purpose_html = markdown_to_html(sections["purpose"])
 
     font_sans = "'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'Helvetica Neue', Arial, sans-serif"
+    accent = "#2f5d73"
+    accent_soft = "#eaf4f7"
+    accent_border = "#c8dde5"
+    answer_soft = "#f2f7ff"
+    answer_border = "#d6e4ff"
+    answer_accent = "#335c9b"
+    purpose_soft = "#f4f8f2"
+    purpose_border = "#d8e5cf"
+    purpose_accent = "#5b7c46"
 
     purpose_block = ""
     if sections["purpose"]:
         purpose_block = f"""
-              <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"border-collapse: collapse; background-color: #f4f8f2; border: 1px solid #d8e5cf;\">
+              <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"border-collapse: collapse; margin-top: 20px; background-color: {purpose_soft}; border: 1px solid {purpose_border};\">
                 <tr>
-                  <td style=\"padding: 24px 24px 28px 24px;\">
-                    <div style=\"font-family: {font_sans}; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #5b7c46; margin-bottom: 12px;\">출제 의도</div>
-                    <div style=\"font-family: {font_sans}; font-size: 14px; line-height: 1.8; color: #475569;\">{purpose_html}</div>
+                  <td style=\"padding: 0;\">
+                    <div style=\"height: 5px; line-height: 5px; font-size: 5px; background-color: {purpose_accent};\">&nbsp;</div>
+                    <div style=\"padding: 22px 24px 26px 24px;\">
+                      <div style=\"font-family: {font_sans}; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {purpose_accent}; margin-bottom: 12px;\">출제 의도</div>
+                      <div style=\"font-family: {font_sans}; font-size: 14px; line-height: 1.8; color: #475569;\">{purpose_html}</div>
+                    </div>
                   </td>
                 </tr>
               </table>
@@ -501,26 +513,33 @@ def create_email_html(question: dict) -> str:
   <meta name=\"x-apple-disable-message-reformatting\" />
   <title>통계분석 일일 문제</title>
 </head>
-<body style=\"margin: 0; padding: 0; background-color: #eef2f6; font-family: {font_sans};\">
+<body style=\"margin: 0; padding: 0; background-color: #edf3f8; font-family: {font_sans};\">
   <div style=\"display: none; max-height: 0; overflow: hidden; opacity: 0; mso-hide: all;\">오늘의 통계 문제와 해설이 도착했습니다.</div>
-  <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"border-collapse: collapse; background-color: #eef2f6;\">
+  <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"border-collapse: collapse; background-color: #edf3f8;\">
     <tr>
       <td align=\"center\" style=\"padding: 24px 12px;\">
-        <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"640\" style=\"border-collapse: collapse; width: 100%; max-width: 640px; background-color: #ffffff; border: 1px solid #d9e2ec;\">
+        <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"680\" style=\"border-collapse: collapse; width: 100%; max-width: 680px; background-color: #ffffff; border: 1px solid #d9e2ec;\">
           <tr>
-            <td style=\"padding: 28px 28px 22px 28px; background-color: #2f5d73;\">
-              <div style=\"font-family: {font_sans}; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #dbe7ee; font-weight: 700;\">Daily Statistics Question</div>
-              <h1 style=\"margin: 10px 0 0 0; font-family: {font_sans}; font-size: 28px; line-height: 1.3; color: #ffffff; font-weight: 700;\">📊 통계분석 일일 문제</h1>
-              <p style=\"margin: 10px 0 0 0; font-family: {font_sans}; font-size: 14px; line-height: 1.6; color: #dbe7ee;\">{date_str}</p>
+            <td style=\"padding: 14px 28px; background-color: #f7fafc; border-bottom: 1px solid #d9e2ec;\">
+              <span style=\"display: inline-block; font-family: {font_sans}; font-size: 11px; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; color: {accent}; background-color: #e3edf3; padding: 8px 10px;\">Daily Statistics Question</span>
+            </td>
+          </tr>
+          <tr>
+            <td style=\"padding: 30px 28px 26px 28px; background-color: {accent};\">
+              <h1 style=\"margin: 0; font-family: {font_sans}; font-size: 30px; line-height: 1.25; color: #ffffff; font-weight: 700;\">📊 통계분석 일일 문제</h1>
+              <p style=\"margin: 10px 0 0 0; font-family: {font_sans}; font-size: 14px; line-height: 1.7; color: #dbe7ee;\">{date_str}</p>
             </td>
           </tr>
           <tr>
             <td style=\"padding: 28px;\">
-              <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"border-collapse: collapse; background-color: #f8fbfd; border: 1px solid #d9e6ee;\">
+              <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"border-collapse: collapse; background-color: {accent_soft}; border: 1px solid {accent_border};\">
                 <tr>
-                  <td style=\"padding: 24px 24px 28px 24px;\">
-                    <div style=\"font-family: {font_sans}; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3d6d84; margin-bottom: 12px;\">문항</div>
-                    <div style=\"font-family: {font_sans}; font-size: 16px; line-height: 1.8; color: #243b53;\">{question_html}</div>
+                  <td style=\"padding: 0;\">
+                    <div style=\"height: 5px; line-height: 5px; font-size: 5px; background-color: {accent};\">&nbsp;</div>
+                    <div style=\"padding: 22px 24px 26px 24px;\">
+                      <div style=\"font-family: {font_sans}; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {accent}; margin-bottom: 12px;\">문항</div>
+                      <div style=\"font-family: {font_sans}; font-size: 16px; line-height: 1.8; color: #243b53;\">{question_html}</div>
+                    </div>
                   </td>
                 </tr>
               </table>
@@ -529,16 +548,19 @@ def create_email_html(question: dict) -> str:
                 <tr>
                   <td height=\"360\" valign=\"middle\" align=\"center\" style=\"height: 360px; padding: 0 24px; color: #6b7c93; font-family: {font_sans}; font-size: 14px; line-height: 1.7; text-align: center;\">
                     <div style=\"font-size: 15px; font-weight: 700; color: #52606d; margin-bottom: 10px;\">먼저 문제를 직접 풀어보세요.</div>
-                    <div style=\"font-size: 13px; color: #7b8794;\">충분한 간격을 두고 아래에 해설을 배치했습니다.</div>
+                    <div style=\"font-size: 13px; color: #7b8794;\">문제와 해설 사이의 큰 간격은 일부러 유지했습니다.</div>
                   </td>
                 </tr>
               </table>
 
-              <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"border-collapse: collapse; background-color: #f2f7ff; border: 1px solid #d6e4ff;\">
+              <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"border-collapse: collapse; background-color: {answer_soft}; border: 1px solid {answer_border};\">
                 <tr>
-                  <td style=\"padding: 24px 24px 28px 24px;\">
-                    <div style=\"font-family: {font_sans}; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #335c9b; margin-bottom: 12px;\">해설</div>
-                    <div style=\"font-family: {font_sans}; font-size: 15px; line-height: 1.8; color: #243b53;\">{explanation_html}</div>
+                  <td style=\"padding: 0;\">
+                    <div style=\"height: 5px; line-height: 5px; font-size: 5px; background-color: {answer_accent};\">&nbsp;</div>
+                    <div style=\"padding: 22px 24px 26px 24px;\">
+                      <div style=\"font-family: {font_sans}; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: {answer_accent}; margin-bottom: 12px;\">해설</div>
+                      <div style=\"font-family: {font_sans}; font-size: 15px; line-height: 1.8; color: #243b53;\">{explanation_html}</div>
+                    </div>
                   </td>
                 </tr>
               </table>
