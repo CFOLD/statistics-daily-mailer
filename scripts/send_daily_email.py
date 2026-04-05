@@ -185,10 +185,11 @@ def main(argv: list[str]):
     q_html = md_to_html(secs["question"])
     a_html = md_to_html(secs["explanation"])
 
+    mail_date = datetime.now().strftime("%Y-%m-%d")
     vars = DEFAULTS.copy()
     vars.update({
         "content_blocks": build_blocks(q_html, a_html, DEFAULTS["accent"]),
-        "subhead": secs.get("date") or datetime.now().strftime("%Y-%m-%d"),
+        "subhead": secs.get("date") or mail_date,
     })
 
     tpl_html = tpl.safe_substitute(vars)
@@ -199,7 +200,8 @@ def main(argv: list[str]):
         print("Wrote preview to", out)
         return
 
-    send_email(tpl_html, DEFAULTS["title"])
+    subject = f"{DEFAULTS['title']} ({mail_date})"
+    send_email(tpl_html, subject)
     print("Sent email")
 
 
