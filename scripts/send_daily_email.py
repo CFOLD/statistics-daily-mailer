@@ -58,12 +58,13 @@ SECTION_RE = re.compile(r"^(#{2,6})\s+(.+?)\s*$", re.I | re.M)
 
 
 def parse_sections(content: str) -> dict:
-    """Find headings and take content under '문항'/'문제' and '해설'/'정답'"""
+    """Find headings and take content under question/explanation sections, preserving subheadings."""
     lines = content.splitlines()
     sections = {"question": "", "explanation": "", "date": ""}
     current = None
     for ln in lines:
-        m = SECTION_RE.match(ln.strip())
+        stripped = ln.strip()
+        m = SECTION_RE.match(stripped)
         if m:
             title = re.sub(r"\s+", " ", m.group(2)).strip().lower()
             if title in ("문항", "문제", "problem"):
@@ -72,18 +73,17 @@ def parse_sections(content: str) -> dict:
             if title in ("해설", "정답 및 해설", "정답", "solution", "answers"):
                 current = "explanation"
                 continue
-            current = None
+            if current:
+                sections[current] += ln + "\n"
             continue
         if re.match(r"^\s*---\s*$", ln):
-            current = None
             continue
-        gen = re.match(r"^\*?generated on:\s*(.+?)\*?\s*$", ln.strip(), re.I)
+        gen = re.match(r"^\*?generated on:\s*(.+?)\*?\s*$", stripped, re.I)
         if gen:
             sections["date"] = gen.group(1)
             continue
         if current:
             sections[current] += ln + "\n"
-    # fallback
     if not sections["question"] and not sections["explanation"]:
         sections["question"] = content
     for k in ("question", "explanation"):
