@@ -51,23 +51,41 @@ def get_random_question() -> dict:
 
 
 def parse_markdown_question(content: str) -> dict:
-    """Parse markdown question into sections."""
+    """Parse markdown question into sections, tolerating heading variants."""
     sections = {"question": "", "explanation": "", "purpose": "", "date": ""}
-    current_section = None
     buffers = {"question": [], "explanation": [], "purpose": []}
-    section_map = {"문항": "question", "해설": "explanation", "출제 의도": "purpose"}
+    current_section = None
+
+    heading_map = {
+        "문항": "question",
+        "문제": "question",
+        "problem": "question",
+        "questions": "question",
+        "해설": "explanation",
+        "정답 및 해설": "explanation",
+        "solution": "explanation",
+        "answer": "explanation",
+        "answers": "explanation",
+        "출제 의도": "purpose",
+        "출제의도": "purpose",
+        "purpose": "purpose",
+    }
 
     for line in content.splitlines():
-        heading_match = re.match(r"^##\s+(문항|해설|출제 의도)\s*$", line.strip())
+        stripped = line.strip()
+
+        heading_match = re.match(r"^(#{2,6})\s+(.+?)\s*$", stripped)
         if heading_match:
-            current_section = section_map[heading_match.group(1)]
+            normalized = re.sub(r"\s+", " ", heading_match.group(2)).strip()
+            mapped_section = heading_map.get(normalized)
+            if mapped_section:
+                current_section = mapped_section
+                continue
+
+        if re.match(r"^\s*---\s*$", stripped):
             continue
 
-        if re.match(r"^\s*---\s*$", line):
-            current_section = None
-            continue
-
-        generated_match = re.match(r"^\*?Generated on:\s*(.+?)\*?\s*$", line.strip())
+        generated_match = re.match(r"^\*?Generated on:\s*(.+?)\*?\s*$", stripped)
         if generated_match:
             sections["date"] = generated_match.group(1)
             continue
@@ -77,6 +95,14 @@ def parse_markdown_question(content: str) -> dict:
 
     for key, lines in buffers.items():
         sections[key] = "\n".join(lines).strip()
+
+    if not sections["question"] and not sections["explanation"]:
+        solution_split = re.split(r"(?im)^#{2,6}\s+(?:solution|해설|정답 및 해설)\s*$", content, maxsplit=1)
+        if len(solution_split) == 2:
+            sections["question"] = re.sub(r"(?im)^#{2,6}\s+.*$", "", solution_split[0]).strip()
+            sections["explanation"] = solution_split[1].strip()
+        else:
+            sections["question"] = content.strip()
 
     return sections
 
@@ -454,107 +480,70 @@ def create_email_html(question: dict) -> str:
 
     font_sans = "'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'Helvetica Neue', Arial, sans-serif"
 
-    return f"""<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
+    purpose_block = ""
+    if sections["purpose"]:
+        purpose_block = f"""
+              <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"border-collapse: collapse; background-color: #f4f8f2; border: 1px solid #d8e5cf;\">
+                <tr>
+                  <td style=\"padding: 24px 24px 28px 24px;\">
+                    <div style=\"font-family: {font_sans}; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #5b7c46; margin-bottom: 12px;\">출제 의도</div>
+                    <div style=\"font-family: {font_sans}; font-size: 14px; line-height: 1.8; color: #475569;\">{purpose_html}</div>
+                  </td>
+                </tr>
+              </table>
+        """
+
+    return f"""<!DOCTYPE html>
+<html xmlns=\"http://www.w3.org/1999/xhtml\">
 <head>
-  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="x-apple-disable-message-reformatting" />
+  <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
+  <meta name=\"x-apple-disable-message-reformatting\" />
   <title>통계분석 일일 문제</title>
-  <style type="text/css">
-    body, table, td, p, a, li, blockquote {{
-      -ms-text-size-adjust: 100%;
-      -webkit-text-size-adjust: 100%;
-      margin: 0;
-      padding: 0;
-    }}
-    table, td {{
-      mso-table-lspace: 0pt;
-      mso-table-rspace: 0pt;
-    }}
-    table {{
-      border-collapse: collapse !important;
-    }}
-    img {{
-      -ms-interpolation-mode: bicubic;
-      border: 0;
-      height: auto;
-      line-height: 100%;
-      outline: none;
-      text-decoration: none;
-    }}
-    a {{
-      color: #2563eb;
-    }}
-    u+[b] a {{
-      color: inherit;
-      text-decoration: none;
-    }}
-    @media screen and (max-width: 600px) {{
-      .email-container {{
-        width: 100% !important;
-      }}
-      .content-padding {{
-        padding-left: 20px !important;
-        padding-right: 20px !important;
-      }}
-    }}
-  </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: {font_sans};">
-  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f5f5f5;">
+<body style=\"margin: 0; padding: 0; background-color: #eef2f6; font-family: {font_sans};\">
+  <div style=\"display: none; max-height: 0; overflow: hidden; opacity: 0; mso-hide: all;\">오늘의 통계 문제와 해설이 도착했습니다.</div>
+  <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"border-collapse: collapse; background-color: #eef2f6;\">
     <tr>
-      <td align="center" style="padding: 20px 0;">
-        <table class="email-container" role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" style="background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 600px; width: 100%;">
+      <td align=\"center\" style=\"padding: 24px 12px;\">
+        <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"640\" style=\"border-collapse: collapse; width: 100%; max-width: 640px; background-color: #ffffff; border: 1px solid #d9e2ec;\">
           <tr>
-            <td style="background: linear-gradient(135deg, #4A90A4 0%, #357A9A 100%); padding: 32px 28px; text-align: left;">
-              <h1 style="margin: 0; font-family: {font_sans}; font-size: 26px; font-weight: 600; color: #ffffff; line-height: 1.3;">📊 통계분석 일일 문제</h1>
-              <p style="margin: 10px 0 0 0; font-family: {font_sans}; font-size: 14px; color: rgba(255,255,255,0.9);">{date_str}</p>
+            <td style=\"padding: 28px 28px 22px 28px; background-color: #2f5d73;\">
+              <div style=\"font-family: {font_sans}; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #dbe7ee; font-weight: 700;\">Daily Statistics Question</div>
+              <h1 style=\"margin: 10px 0 0 0; font-family: {font_sans}; font-size: 28px; line-height: 1.3; color: #ffffff; font-weight: 700;\">📊 통계분석 일일 문제</h1>
+              <p style=\"margin: 10px 0 0 0; font-family: {font_sans}; font-size: 14px; line-height: 1.6; color: #dbe7ee;\">{date_str}</p>
             </td>
           </tr>
           <tr>
-            <td class="content-padding" style="padding: 36px 32px; background-color: #ffffff;">
-              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafb; border: 1px solid #e1e8ed; border-radius: 8px; margin-bottom: 40px;">
+            <td style=\"padding: 28px;\">
+              <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"border-collapse: collapse; background-color: #f8fbfd; border: 1px solid #d9e6ee;\">
                 <tr>
-                  <td style="padding: 28px 24px;">
-                    <h2 style="margin: 0 0 20px 0; font-family: {font_sans}; font-size: 18px; font-weight: 600; color: #2c5282; padding-bottom: 14px; border-bottom: 2px solid #bed6e6;">문항</h2>
-                    <div style="font-family: {font_sans}; font-size: 16px; line-height: 1.8; color: #334155;">
-                      {question_html}
-                    </div>
+                  <td style=\"padding: 24px 24px 28px 24px;\">
+                    <div style=\"font-family: {font_sans}; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3d6d84; margin-bottom: 12px;\">문항</div>
+                    <div style=\"font-family: {font_sans}; font-size: 16px; line-height: 1.8; color: #243b53;\">{question_html}</div>
                   </td>
                 </tr>
               </table>
 
-              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" height="1000" style="background: linear-gradient(to bottom, #f5f5f5, rgba(245,245,245,0.3)); margin: 40px 0;">
+              <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"border-collapse: collapse;\">
                 <tr>
-                  <td align="center" valign="middle" style="color: #94a3b8; font-size: 15px; font-family: {font_sans};">
-                    <p style="margin: 0 0 10px 0; font-size: 16px; font-weight: 600;">📝 아래로 스크롤하여 해설 확인</p>
-                    <p style="margin: 0; font-size: 13px; color: #64748b;">(먼저 문제를 풀어보세요!)</p>
+                  <td height=\"360\" valign=\"middle\" align=\"center\" style=\"height: 360px; padding: 0 24px; color: #6b7c93; font-family: {font_sans}; font-size: 14px; line-height: 1.7; text-align: center;\">
+                    <div style=\"font-size: 15px; font-weight: 700; color: #52606d; margin-bottom: 10px;\">먼저 문제를 직접 풀어보세요.</div>
+                    <div style=\"font-size: 13px; color: #7b8794;\">충분한 간격을 두고 아래에 해설을 배치했습니다.</div>
                   </td>
                 </tr>
               </table>
 
-              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f0f7ff; border: 1px solid #d1e8ff; border-radius: 8px; margin-bottom: 16px;">
+              <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"border-collapse: collapse; background-color: #f2f7ff; border: 1px solid #d6e4ff;\">
                 <tr>
-                  <td style="padding: 28px 24px;">
-                    <h2 style="margin: 0 0 20px 0; font-family: {font_sans}; font-size: 18px; font-weight: 600; color: #2b6cb0; padding-bottom: 14px; border-bottom: 2px solid #93c5fd;">해설</h2>
-                    <div style="font-family: {font_sans}; font-size: 15px; line-height: 1.8; color: #334155;">
-                      {explanation_html}
-                    </div>
+                  <td style=\"padding: 24px 24px 28px 24px;\">
+                    <div style=\"font-family: {font_sans}; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #335c9b; margin-bottom: 12px;\">해설</div>
+                    <div style=\"font-family: {font_sans}; font-size: 15px; line-height: 1.8; color: #243b53;\">{explanation_html}</div>
                   </td>
                 </tr>
               </table>
 
-              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f9fbf5; border: 1px solid #e8f0d8; border-radius: 8px;">
-                <tr>
-                  <td style="padding: 28px 24px;">
-                    <h2 style="margin: 0 0 20px 0; font-family: {font_sans}; font-size: 18px; font-weight: 600; color: #276749; padding-bottom: 14px; border-bottom: 2px solid #9ae6b4;">출제 의도</h2>
-                    <div style="font-family: {font_sans}; font-size: 14px; line-height: 1.8; color: #4a5568;">
-                      {purpose_html}
-                    </div>
-                  </td>
-                </tr>
-              </table>
+              {purpose_block}
             </td>
           </tr>
         </table>
@@ -563,6 +552,13 @@ def create_email_html(question: dict) -> str:
   </table>
 </body>
 </html>"""
+
+
+def open_smtp_connection():
+    """Open an SMTP connection with sensible defaults for 465/587."""
+    if SMTP_PORT == 465:
+        return smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
+    return smtplib.SMTP(SMTP_HOST, SMTP_PORT)
 
 
 def validate_email_config() -> None:
@@ -593,8 +589,9 @@ def send_email(question: dict) -> None:
     html_content = create_email_html(question)
     msg.attach(MIMEText(html_content, "html", "utf-8"))
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls()
+    with open_smtp_connection() as server:
+        if SMTP_PORT != 465:
+            server.starttls()
         server.login(SMTP_USERNAME, SMTP_PASSWORD)
         server.send_message(msg)
 
