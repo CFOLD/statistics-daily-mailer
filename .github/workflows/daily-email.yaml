@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: pip install markdown-it-py beautifulsoup4
 
-      - name: Send email
+      - name: Send email (official)
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
