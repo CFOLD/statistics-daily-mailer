@@ -1,4 +1,4 @@
-# Statistics
+# statistics-daily-mailer
 
 Private GitHub repository for sending daily statistics questions by email with GitHub Actions.
 
