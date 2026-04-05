@@ -48,7 +48,11 @@ DEFAULTS = {
 }
 
 
-def find_latest_question() -> Path:
+def find_question() -> Path:
+    today = datetime.now().strftime("%Y%m%d")
+    today_matches = sorted(QUESTIONS_DIR.glob(f"*{today}*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if today_matches:
+        return today_matches[0]
     md = sorted(QUESTIONS_DIR.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not md:
         raise FileNotFoundError("No question files found")
@@ -148,6 +152,29 @@ def send_email(html: str, subject: str):
         s.send_message(msg)
 
 
+def build_blocks(question_html: str, explanation_html: str, accent: str) -> str:
+    return f"""
+    <table role="presentation" width="100%" style="border-collapse:collapse; margin-bottom:24px; background:#eaf4f7; border:1px solid #c8dde5;">
+      <tr><td style="padding:0;">
+        <div style="height:5px; background:{accent}; line-height:5px; font-size:5px;">&nbsp;</div>
+        <div style="padding:22px;">{question_html}</div>
+      </td></tr>
+    </table>
+
+    <table role="presentation" width="100%" style="border-collapse:collapse;">
+      <tr><td height="360" style="text-align:center; color:#6b7c93;">&nbsp;</td></tr>
+    </table>
+
+    <table role="presentation" width="100%" style="border-collapse:collapse; margin-top:14px; background:#f2f7ff; border:1px solid #d6e4ff;">
+      <tr><td style="padding:0;">
+        <div style="height:5px; background:#335c9b; line-height:5px; font-size:5px;">&nbsp;</div>
+        <div style="padding:22px;">{explanation_html}</div>
+      </td></tr>
+    </table>
+    """
+
+
+
 def main(argv: list[str]):
     import argparse
 
@@ -157,36 +184,15 @@ def main(argv: list[str]):
     args = p.parse_args(argv)
 
     tpl = load_template()
-    qfile = Path(args.file) if args.file else find_latest_question()
+    qfile = Path(args.file) if args.file else find_question()
     content = qfile.read_text(encoding="utf-8")
     secs = parse_sections(content)
     q_html = md_to_html(secs["question"])
     a_html = md_to_html(secs["explanation"])
 
-    content_blocks = f"""
-    <table role="presentation" width="100%" style="border-collapse:collapse; margin-bottom:24px;">
-      <tr><td style="padding:0;">
-        <div style="height:5px; background:{accent};">&nbsp;</div>
-        <div style="padding:22px;">{q_html}</div>
-      </td></tr>
-    </table>
-
-    <table role="presentation" width="100%" style="border-collapse:collapse;">
-      <tr><td height="360" style="text-align:center; color:#6b7c93;">&nbsp;</td></tr>
-    </table>
-
-    <table role="presentation" width="100%" style="border-collapse:collapse; margin-top:14px;">
-      <tr><td style="padding:0;">
-        <div style="height:5px; background:#335c9b;">&nbsp;</div>
-        <div style="padding:22px;">{a_html}</div>
-      </td></tr>
-    </table>
-    """
-
     vars = DEFAULTS.copy()
     vars.update({
-        "content_blocks": content_blocks,
-        "headline": DEFAULTS["title"],
+        "content_blocks": build_blocks(q_html, a_html, DEFAULTS["accent"]),
         "subhead": secs.get("date") or datetime.now().strftime("%Y-%m-%d"),
     })
 
