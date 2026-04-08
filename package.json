@@ -1,0 +1,9 @@
+{
+  "name": "statistics-daily-mailer",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Daily statistics email renderer",
+  "dependencies": {
+    "katex": "^0.16.11"
+  }
+}

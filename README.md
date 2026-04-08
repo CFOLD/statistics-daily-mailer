@@ -11,6 +11,7 @@ Question generation logic lives in the `statistics-question-creator` skill, and 
 - Prefers a file whose name includes today's date (`YYYYMMDD`)
 - Falls back to the most recent question file if no dated file matches today
 - Converts the markdown question into email-friendly HTML
+- Pre-renders supported LaTeX math locally with KaTeX before inserting it into the email HTML
 - Sends the email through SMTP using GitHub Actions
 - Runs automatically every day at **09:00 Asia/Seoul**
 
@@ -19,8 +20,11 @@ Question generation logic lives in the `statistics-question-creator` skill, and 
 - `questions/`: delivered question markdown files
 - `templates/daily_email.html`: email HTML template
 - `scripts/send_daily_email.py`: mail sending script
+- `scripts/email_render.py`: markdown and KaTeX-based math renderer
+- `scripts/render_math.js`: local KaTeX renderer used during email generation
 - `.github/workflows/daily-email.yml`: scheduled/manual GitHub Actions workflow
 - `.github/SECRETS_SETUP.md`: GitHub Actions secret setup guide
+- `package.json`: local Node dependency manifest for KaTeX
 
 ## Required GitHub secrets
 

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Optional
+import json
+import subprocess
+from functools import lru_cache
+from pathlib import Path
 
 try:
     from markdown_it import MarkdownIt
@@ -12,16 +15,59 @@ try:
 except Exception:
     BeautifulSoup = None
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+MATH_RENDERER = SCRIPT_DIR / "render_math.js"
+
 
 def md_to_html(md: str) -> str:
     if not md:
         return ""
+    md = _render_math(md)
     if MarkdownIt:
-        html = MarkdownIt("commonmark", {"html": False, "breaks": True}).enable("table").render(md)
+        html = MarkdownIt("commonmark", {"html": True, "breaks": True}).enable("table").render(md)
     else:
         parts = [p.strip() for p in md.split("\n\n") if p.strip()]
         html = "".join(f"<p>{p.replace(chr(10), '<br/>')}</p>" for p in parts)
     return _style_html(html)
+
+
+def _render_math(md: str) -> str:
+    if not _can_render_math():
+        return md
+    payload = json.dumps({"text": md}, ensure_ascii=False)
+    try:
+        proc = subprocess.run(
+            ["node", str(MATH_RENDERER)],
+            input=payload,
+            text=True,
+            capture_output=True,
+            check=True,
+            cwd=str(SCRIPT_DIR.parent),
+        )
+    except Exception:
+        return md
+    try:
+        data = json.loads(proc.stdout)
+    except Exception:
+        return md
+    return str(data.get("html") or md)
+
+
+@lru_cache(maxsize=1)
+def _can_render_math() -> bool:
+    if not MATH_RENDERER.exists():
+        return False
+    try:
+        proc = subprocess.run(
+            ["node", "-e", "require('katex'); process.stdout.write('ok')"],
+            text=True,
+            capture_output=True,
+            cwd=str(SCRIPT_DIR.parent),
+            check=True,
+        )
+        return proc.stdout.strip() == "ok"
+    except Exception:
+        return False
 
 
 def _style_html(html: str) -> str:
@@ -68,6 +114,14 @@ def _style_html(html: str) -> str:
         ol["style"] = "margin:12px 0; padding-left:22px;"
     for blockquote in soup.find_all("blockquote"):
         blockquote["style"] = "margin:16px 0; padding:8px 16px; border-left:4px solid #cbd5e1; color:#475569;"
+    for span in soup.find_all("span", class_="katex"):
+        _append_style(span, "white-space:nowrap;")
+    for span in soup.find_all("span", class_="katex-display"):
+        _append_style(span, "display:block; overflow-x:auto; overflow-y:hidden; margin:12px 0;")
+        if span.parent and getattr(span.parent, "name", None) == "p":
+            _append_style(span.parent, "text-align:center;")
+    for span in soup.find_all("span", class_="base"):
+        _append_style(span, "display:inline-block;")
 
     return "".join(str(child) for child in soup.div.contents)
 
