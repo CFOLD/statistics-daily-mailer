@@ -12,12 +12,17 @@ from __future__ import annotations
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from string import Template
 import smtplib
+
+try:
+    import holidays
+except Exception:
+    holidays = None
 
 from email_render import md_to_html
 
@@ -87,6 +92,15 @@ def load_template() -> Template:
     return Template(txt)
 
 
+def is_kr_business_day(day: date) -> bool:
+    if day.weekday() >= 5:
+        return False
+    if holidays is None:
+        return True
+    kr_holidays = holidays.country_holidays("KR", years=[day.year])
+    return day not in kr_holidays
+
+
 def open_smtp():
     port = int(os.getenv("SMTP_PORT", 587))
     host = os.getenv("SMTP_HOST")
@@ -147,6 +161,11 @@ def main(argv: list[str]):
     p.add_argument("--file", help="Markdown file to send")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args(argv)
+
+    today = datetime.now().date()
+    if not args.file and not args.dry_run and not is_kr_business_day(today):
+        print(f"Skipping send for non-business day: {today.isoformat()}")
+        return
 
     tpl = load_template()
     qfile = Path(args.file) if args.file else find_question()

@@ -14,6 +14,7 @@ Question generation logic lives in the `statistics-question-creator` skill, and 
 - Pre-renders supported LaTeX math locally with KaTeX before inserting it into the email HTML
 - Sends the email through SMTP using GitHub Actions
 - Runs automatically every weekday at **09:00 Asia/Seoul**
+- Skips Korean public holidays during scheduled sends
 
 ## Repository layout
 
@@ -46,6 +47,7 @@ This usually requires enabling 2-Step Verification on the Google account.
 GitHub Actions cron uses UTC.
 
 - `0 0 * * 1-5` UTC = `09:00` Asia/Seoul every weekday
+- The send script additionally skips Korean public holidays
 
 ## Manual run
 

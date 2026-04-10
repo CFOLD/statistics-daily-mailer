@@ -33,7 +33,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install markdown-it-py beautifulsoup4
+          pip install markdown-it-py beautifulsoup4 holidays
           npm ci
 
       - name: Send daily email
