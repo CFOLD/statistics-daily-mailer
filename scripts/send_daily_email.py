@@ -51,6 +51,7 @@ def find_question() -> Path | None:
 
 
 SECTION_RE = re.compile(r"^(#{2,6})\s+(.+?)\s*$", re.I | re.M)
+DATE_FROM_FILENAME_RE = re.compile(r"_(\d{8})\.md$")
 
 
 def parse_sections(content: str) -> dict:
@@ -90,6 +91,16 @@ def parse_sections(content: str) -> dict:
 def load_template() -> Template:
     txt = TEMPLATE_PATH.read_text(encoding="utf-8")
     return Template(txt)
+
+
+def extract_target_date(path: Path) -> str | None:
+    match = DATE_FROM_FILENAME_RE.search(path.name)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%Y%m%d").strftime("%Y-%m-%d")
+    except ValueError:
+        return None
 
 
 def is_kr_business_day(day: date) -> bool:
@@ -177,11 +188,11 @@ def main(argv: list[str]):
     q_html = md_to_html(secs["question"])
     a_html = md_to_html(secs["explanation"])
 
-    mail_date = datetime.now().strftime("%Y-%m-%d")
+    mail_date = extract_target_date(qfile) or datetime.now().strftime("%Y-%m-%d")
     vars = DEFAULTS.copy()
     vars.update({
         "content_blocks": build_blocks(q_html, a_html, DEFAULTS["accent"]),
-        "subhead": secs.get("date") or mail_date,
+        "subhead": mail_date,
     })
 
     tpl_html = tpl.safe_substitute(vars)
