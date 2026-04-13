@@ -24,7 +24,7 @@ try:
 except Exception:
     holidays = None
 
-from email_render import md_to_html
+from email_render import extra_head_html, md_to_html
 
 BASE = Path(__file__).resolve().parents[1]
 TEMPLATE_PATH = BASE / "templates" / "daily_email.html"
@@ -193,6 +193,7 @@ def main(argv: list[str]):
     vars.update({
         "content_blocks": build_blocks(q_html, a_html, DEFAULTS["accent"]),
         "subhead": mail_date,
+        "extra_head": extra_head_html(),
     })
 
     tpl_html = tpl.safe_substitute(vars)

@@ -16,19 +16,38 @@ except Exception:
     BeautifulSoup = None
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_DIR = SCRIPT_DIR.parent
 MATH_RENDERER = SCRIPT_DIR / "render_math.js"
+KATEX_CSS_PATH = REPO_DIR / "node_modules" / "katex" / "dist" / "katex.min.css"
+
+EMAIL_KATEX_OVERRIDES = """
+.katex { white-space: nowrap; }
+.katex-display { display:block; overflow-x:auto; overflow-y:hidden; margin:12px 0; text-align:center; }
+.katex-display > .katex { white-space: normal; }
+""".strip()
 
 
 def md_to_html(md: str) -> str:
     if not md:
         return ""
-    md = _render_math(md)
+    rendered_md = _render_math(md)
     if MarkdownIt:
-        html = MarkdownIt("commonmark", {"html": True, "breaks": True}).enable("table").render(md)
+        html = MarkdownIt("commonmark", {"html": True, "breaks": True}).enable("table").render(rendered_md)
     else:
-        parts = [p.strip() for p in md.split("\n\n") if p.strip()]
+        parts = [p.strip() for p in rendered_md.split("\n\n") if p.strip()]
         html = "".join(f"<p>{p.replace(chr(10), '<br/>')}</p>" for p in parts)
     return _style_html(html)
+
+
+def extra_head_html() -> str:
+    css_parts: list[str] = []
+    katex_css = _load_katex_css()
+    if katex_css:
+        css_parts.append(katex_css)
+    css_parts.append(EMAIL_KATEX_OVERRIDES)
+    if not css_parts:
+        return ""
+    return "<style>\n" + "\n".join(css_parts) + "\n</style>"
 
 
 def _render_math(md: str) -> str:
@@ -42,7 +61,7 @@ def _render_math(md: str) -> str:
             text=True,
             capture_output=True,
             check=True,
-            cwd=str(SCRIPT_DIR.parent),
+            cwd=str(REPO_DIR),
         )
     except Exception:
         return md
@@ -62,12 +81,20 @@ def _can_render_math() -> bool:
             ["node", "-e", "require('katex'); process.stdout.write('ok')"],
             text=True,
             capture_output=True,
-            cwd=str(SCRIPT_DIR.parent),
+            cwd=str(REPO_DIR),
             check=True,
         )
         return proc.stdout.strip() == "ok"
     except Exception:
         return False
+
+
+@lru_cache(maxsize=1)
+def _load_katex_css() -> str:
+    try:
+        return KATEX_CSS_PATH.read_text(encoding="utf-8")
+    except Exception:
+        return ""
 
 
 def _style_html(html: str) -> str:
@@ -76,10 +103,6 @@ def _style_html(html: str) -> str:
 
     soup = BeautifulSoup(f"<div>{html}</div>", "html.parser")
 
-    for tag in soup.find_all():
-        if not tag.get_text(strip=True) and not tag.find(True):
-            tag.decompose()
-
     for table in soup.find_all("table"):
         table["role"] = "presentation"
         table["style"] = (
@@ -87,11 +110,15 @@ def _style_html(html: str) -> str:
             "font-size:14px; line-height:1.6; border:1px solid #d9e2ec;"
         )
         for th in table.find_all("th"):
+            if not th.get_text(strip=True) and not th.find(True):
+                th.string = "\xa0"
             _append_style(
                 th,
                 "border:1px solid #d9e2ec; padding:10px 12px; background:#f8fafc; font-weight:700;",
             )
         for td in table.find_all("td"):
+            if not td.get_text(strip=True) and not td.find(True):
+                td.string = "\xa0"
             _append_style(
                 td,
                 "border:1px solid #d9e2ec; padding:10px 12px; vertical-align:top;",
@@ -117,9 +144,7 @@ def _style_html(html: str) -> str:
     for span in soup.find_all("span", class_="katex"):
         _append_style(span, "white-space:nowrap;")
     for span in soup.find_all("span", class_="katex-display"):
-        _append_style(span, "display:block; overflow-x:auto; overflow-y:hidden; margin:12px 0;")
-        if span.parent and getattr(span.parent, "name", None) == "p":
-            _append_style(span.parent, "text-align:center;")
+        _append_style(span, "display:block; overflow-x:auto; overflow-y:hidden; margin:12px 0; text-align:center;")
     for span in soup.find_all("span", class_="base"):
         _append_style(span, "display:inline-block;")
 
