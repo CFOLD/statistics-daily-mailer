@@ -2,17 +2,19 @@
 """Daily email sender.
 
 Loads `templates/daily_email.html`, renders question markdown to HTML,
-and sends via SMTP. Uses `markdown-it-py` and `beautifulsoup4` when
-available, with safe fallbacks.
+and sends via SMTP. Uses markdown-it-py / beautifulsoup4 for markdown,
+and a dedicated local KaTeX image renderer for math expressions.
 
 Usage: python scripts/send_daily_email.py [--file PATH] [--dry-run]
 """
 from __future__ import annotations
 
+import base64
 import os
 import re
 import sys
 from datetime import date, datetime
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -24,13 +26,12 @@ try:
 except Exception:
     holidays = None
 
-from email_render import extra_head_html, md_to_html
+from email_render import render_markdown
 
 BASE = Path(__file__).resolve().parents[1]
 TEMPLATE_PATH = BASE / "templates" / "daily_email.html"
 QUESTIONS_DIR = BASE / "questions"
 
-# Visual defaults for Statistics
 DEFAULTS = {
     "title": "통계분석 일일 문제",
     "headline": "📊 통계분석 일일 문제",
@@ -43,6 +44,9 @@ DEFAULTS = {
     "font_sans": "'Noto Sans KR', Arial, sans-serif",
 }
 
+SECTION_RE = re.compile(r"^(#{2,6})\s+(.+?)\s*$", re.I | re.M)
+DATE_FROM_FILENAME_RE = re.compile(r"_(\d{8})\.md$")
+
 
 def find_question() -> Path | None:
     today = datetime.now().strftime("%Y%m%d")
@@ -50,12 +54,7 @@ def find_question() -> Path | None:
     return today_matches[0] if today_matches else None
 
 
-SECTION_RE = re.compile(r"^(#{2,6})\s+(.+?)\s*$", re.I | re.M)
-DATE_FROM_FILENAME_RE = re.compile(r"_(\d{8})\.md$")
-
-
 def parse_sections(content: str) -> dict:
-    """Find headings and take content under question/explanation sections, preserving subheadings."""
     lines = content.splitlines()
     sections = {"question": "", "explanation": "", "date": ""}
     current = None
@@ -89,8 +88,7 @@ def parse_sections(content: str) -> dict:
 
 
 def load_template() -> Template:
-    txt = TEMPLATE_PATH.read_text(encoding="utf-8")
-    return Template(txt)
+    return Template(TEMPLATE_PATH.read_text(encoding="utf-8"))
 
 
 def extract_target_date(path: Path) -> str | None:
@@ -122,18 +120,28 @@ def open_smtp():
     return smtplib.SMTP(host, port)
 
 
-def send_email(html: str, subject: str):
+def send_email(html: str, subject: str, inline_images: list[dict]):
     username = os.getenv("SMTP_USERNAME")
     password = os.getenv("SMTP_PASSWORD")
     recipients = [e.strip() for e in os.getenv("EMAIL_RECIPIENTS", "").split(",") if e.strip()]
     if not recipients:
         raise RuntimeError("EMAIL_RECIPIENTS not set")
 
-    msg = MIMEMultipart("alternative")
+    msg = MIMEMultipart("related")
     msg["Subject"] = subject
     msg["From"] = username or "noreply@example.com"
     msg["To"] = ", ".join(recipients)
-    msg.attach(MIMEText(html, "html", "utf-8"))
+
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(html, "html", "utf-8"))
+    msg.attach(alt)
+
+    for image in inline_images:
+        subtype = image["mime_type"].split("/", 1)[-1]
+        part = MIMEImage(image["data"], _subtype=subtype)
+        part.add_header("Content-ID", f"<{image['cid']}>")
+        part.add_header("Content-Disposition", "inline", filename=f"{image['cid']}.{subtype}")
+        msg.attach(part)
 
     with open_smtp() as s:
         if int(os.getenv("SMTP_PORT", 587)) != 465:
@@ -183,19 +191,18 @@ def main(argv: list[str]):
     if qfile is None:
         print("No question file found for today; skipping send.")
         return
+
     content = qfile.read_text(encoding="utf-8")
     secs = parse_sections(content)
-    q_html = md_to_html(secs["question"])
-    a_html = md_to_html(secs["explanation"])
+    question = render_markdown(secs["question"], preview=args.dry_run)
+    explanation = render_markdown(secs["explanation"], preview=args.dry_run)
 
     mail_date = extract_target_date(qfile) or datetime.now().strftime("%Y-%m-%d")
     vars = DEFAULTS.copy()
     vars.update({
-        "content_blocks": build_blocks(q_html, a_html, DEFAULTS["accent"]),
+        "content_blocks": build_blocks(question.html, explanation.html, DEFAULTS["accent"]),
         "subhead": mail_date,
-        "extra_head": extra_head_html(),
     })
-
     tpl_html = tpl.safe_substitute(vars)
 
     if args.dry_run:
@@ -204,8 +211,21 @@ def main(argv: list[str]):
         print("Wrote preview to", out)
         return
 
+    inline_images = []
+    seen: set[str] = set()
+    for section in (question, explanation):
+        for image in section.inline_images:
+            if image.cid in seen:
+                continue
+            seen.add(image.cid)
+            inline_images.append({
+                "cid": image.cid,
+                "mime_type": image.mime_type,
+                "data": base64.b64decode(image.data),
+            })
+
     subject = f"{DEFAULTS['title']} ({mail_date})"
-    send_email(tpl_html, subject)
+    send_email(tpl_html, subject, inline_images)
     print("Sent email")
 
 

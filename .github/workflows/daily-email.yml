@@ -35,6 +35,7 @@ jobs:
         run: |
           pip install markdown-it-py beautifulsoup4 holidays
           npm ci
+          npx playwright install --with-deps chromium
 
       - name: Send daily email
         env:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -17,46 +18,44 @@ except Exception:
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_DIR = SCRIPT_DIR.parent
-MATH_RENDERER = SCRIPT_DIR / "render_math.js"
-KATEX_CSS_PATH = REPO_DIR / "node_modules" / "katex" / "dist" / "katex.min.css"
-
-EMAIL_KATEX_OVERRIDES = """
-.katex { white-space: nowrap; }
-.katex-display { display:block; overflow-x:auto; overflow-y:hidden; margin:12px 0; text-align:center; }
-.katex-display > .katex { white-space: normal; }
-""".strip()
+MATH_IMAGE_RENDERER = SCRIPT_DIR / "render_math_images.js"
 
 
-def md_to_html(md: str) -> str:
+@dataclass
+class InlineImage:
+    cid: str
+    mime_type: str
+    data: str
+
+
+@dataclass
+class RenderedContent:
+    html: str
+    inline_images: list[InlineImage]
+
+
+def render_markdown(md: str, *, preview: bool = False) -> RenderedContent:
     if not md:
-        return ""
-    rendered_md = _render_math(md)
+        return RenderedContent(html="", inline_images=[])
+
+    rendered_md, inline_images = _render_math_images(md, preview=preview)
     if MarkdownIt:
         html = MarkdownIt("commonmark", {"html": True, "breaks": True}).enable("table").render(rendered_md)
     else:
         parts = [p.strip() for p in rendered_md.split("\n\n") if p.strip()]
         html = "".join(f"<p>{p.replace(chr(10), '<br/>')}</p>" for p in parts)
-    return _style_html(html)
+
+    return RenderedContent(html=_style_html(html), inline_images=inline_images)
 
 
-def extra_head_html() -> str:
-    css_parts: list[str] = []
-    katex_css = _load_katex_css()
-    if katex_css:
-        css_parts.append(katex_css)
-    css_parts.append(EMAIL_KATEX_OVERRIDES)
-    if not css_parts:
-        return ""
-    return "<style>\n" + "\n".join(css_parts) + "\n</style>"
+def _render_math_images(md: str, *, preview: bool) -> tuple[str, list[InlineImage]]:
+    if not _can_render_math_images():
+        return md, []
 
-
-def _render_math(md: str) -> str:
-    if not _can_render_math():
-        return md
-    payload = json.dumps({"text": md}, ensure_ascii=False)
+    payload = json.dumps({"text": md, "mode": "preview" if preview else "email"}, ensure_ascii=False)
     try:
         proc = subprocess.run(
-            ["node", str(MATH_RENDERER)],
+            ["node", str(MATH_IMAGE_RENDERER)],
             input=payload,
             text=True,
             capture_output=True,
@@ -64,21 +63,31 @@ def _render_math(md: str) -> str:
             cwd=str(REPO_DIR),
         )
     except Exception:
-        return md
+        return md, []
+
     try:
         data = json.loads(proc.stdout)
     except Exception:
-        return md
-    return str(data.get("html") or md)
+        return md, []
+
+    images = [
+        InlineImage(
+            cid=str(item["cid"]),
+            mime_type=str(item.get("mimeType") or "image/png"),
+            data=str(item["data"]),
+        )
+        for item in data.get("images", [])
+    ]
+    return str(data.get("markdown") or md), images
 
 
 @lru_cache(maxsize=1)
-def _can_render_math() -> bool:
-    if not MATH_RENDERER.exists():
+def _can_render_math_images() -> bool:
+    if not MATH_IMAGE_RENDERER.exists():
         return False
     try:
         proc = subprocess.run(
-            ["node", "-e", "require('katex'); process.stdout.write('ok')"],
+            ["node", "-e", "require('katex'); require('playwright'); process.stdout.write('ok')"],
             text=True,
             capture_output=True,
             cwd=str(REPO_DIR),
@@ -87,14 +96,6 @@ def _can_render_math() -> bool:
         return proc.stdout.strip() == "ok"
     except Exception:
         return False
-
-
-@lru_cache(maxsize=1)
-def _load_katex_css() -> str:
-    try:
-        return KATEX_CSS_PATH.read_text(encoding="utf-8")
-    except Exception:
-        return ""
 
 
 def _style_html(html: str) -> str:
@@ -141,12 +142,8 @@ def _style_html(html: str) -> str:
         ol["style"] = "margin:12px 0; padding-left:22px;"
     for blockquote in soup.find_all("blockquote"):
         blockquote["style"] = "margin:16px 0; padding:8px 16px; border-left:4px solid #cbd5e1; color:#475569;"
-    for span in soup.find_all("span", class_="katex"):
-        _append_style(span, "white-space:nowrap;")
-    for span in soup.find_all("span", class_="katex-display"):
-        _append_style(span, "display:block; overflow-x:auto; overflow-y:hidden; margin:12px 0; text-align:center;")
-    for span in soup.find_all("span", class_="base"):
-        _append_style(span, "display:inline-block;")
+    for img in soup.find_all("img"):
+        _append_style(img, "border:0; outline:none; text-decoration:none;")
 
     return "".join(str(child) for child in soup.div.contents)
 
