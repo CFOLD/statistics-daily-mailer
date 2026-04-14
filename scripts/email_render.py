@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -21,38 +20,25 @@ REPO_DIR = SCRIPT_DIR.parent
 MATH_IMAGE_RENDERER = SCRIPT_DIR / "render_math_images.js"
 
 
-@dataclass
-class InlineImage:
-    cid: str
-    mime_type: str
-    data: str
-
-
-@dataclass
-class RenderedContent:
-    html: str
-    inline_images: list[InlineImage]
-
-
-def render_markdown(md: str, *, preview: bool = False) -> RenderedContent:
+def render_markdown(md: str) -> str:
     if not md:
-        return RenderedContent(html="", inline_images=[])
+        return ""
 
-    rendered_md, inline_images = _render_math_images(md, preview=preview)
+    rendered_md = _render_math_images(md)
     if MarkdownIt:
         html = MarkdownIt("commonmark", {"html": True, "breaks": True}).enable("table").render(rendered_md)
     else:
         parts = [p.strip() for p in rendered_md.split("\n\n") if p.strip()]
         html = "".join(f"<p>{p.replace(chr(10), '<br/>')}</p>" for p in parts)
 
-    return RenderedContent(html=_style_html(html), inline_images=inline_images)
+    return _style_html(html)
 
 
-def _render_math_images(md: str, *, preview: bool) -> tuple[str, list[InlineImage]]:
+def _render_math_images(md: str) -> str:
     if not _can_render_math_images():
-        return md, []
+        return md
 
-    payload = json.dumps({"text": md, "mode": "preview" if preview else "email"}, ensure_ascii=False)
+    payload = json.dumps({"text": md}, ensure_ascii=False)
     try:
         proc = subprocess.run(
             ["node", str(MATH_IMAGE_RENDERER)],
@@ -63,22 +49,14 @@ def _render_math_images(md: str, *, preview: bool) -> tuple[str, list[InlineImag
             cwd=str(REPO_DIR),
         )
     except Exception:
-        return md, []
+        return md
 
     try:
         data = json.loads(proc.stdout)
     except Exception:
-        return md, []
+        return md
 
-    images = [
-        InlineImage(
-            cid=str(item["cid"]),
-            mime_type=str(item.get("mimeType") or "image/png"),
-            data=str(item["data"]),
-        )
-        for item in data.get("images", [])
-    ]
-    return str(data.get("markdown") or md), images
+    return str(data.get("markdown") or md)
 
 
 @lru_cache(maxsize=1)
