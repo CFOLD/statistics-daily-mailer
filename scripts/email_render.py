@@ -65,7 +65,7 @@ def _can_render_math_images() -> bool:
         return False
     try:
         proc = subprocess.run(
-            ["node", "-e", "require('katex'); require('playwright'); process.stdout.write('ok')"],
+            ["node", "-e", "require('texsvg'); process.stdout.write('ok')"],
             text=True,
             capture_output=True,
             cwd=str(REPO_DIR),

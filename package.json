@@ -4,7 +4,6 @@
   "version": "1.0.0",
   "description": "Daily statistics email renderer",
   "dependencies": {
-    "katex": "^0.16.11",
-    "playwright": "^1.54.2"
+    "texsvg": "^3.0.3"
   }
 }

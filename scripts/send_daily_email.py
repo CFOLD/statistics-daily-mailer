@@ -3,7 +3,7 @@
 
 Loads `templates/daily_email.html`, renders question markdown to HTML,
 and sends via SMTP. Uses markdown-it-py / beautifulsoup4 for markdown,
-and a dedicated local KaTeX SVG-data-URI renderer for math expressions.
+and a dedicated local native-SVG renderer for math expressions.
 
 Usage: python scripts/send_daily_email.py [--file PATH] [--dry-run]
 """
