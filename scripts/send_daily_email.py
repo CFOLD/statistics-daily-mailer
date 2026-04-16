@@ -65,7 +65,11 @@ class ComposedEmail:
 def find_question() -> Path | None:
     today = datetime.now().strftime("%Y%m%d")
     today_matches = sorted(QUESTIONS_DIR.glob(f"*{today}*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return today_matches[0] if today_matches else None
+    if today_matches:
+        return today_matches[0]
+
+    fallback_matches = sorted(QUESTIONS_DIR.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return fallback_matches[0] if fallback_matches else None
 
 
 def parse_sections(content: str) -> dict:
@@ -204,6 +208,17 @@ def compose_email(question_fragment: RenderedFragment, explanation_fragment: Ren
     )
 
 
+def dedupe_inline_images(images: list[InlineImage]) -> list[InlineImage]:
+    deduped: list[InlineImage] = []
+    seen: set[str] = set()
+    for image in images:
+        if image.cid in seen:
+            continue
+        seen.add(image.cid)
+        deduped.append(image)
+    return deduped
+
+
 def emit_warnings(warnings: list[str]) -> None:
     for warning in warnings:
         print(f"[warn] {warning}", file=sys.stderr)
@@ -233,6 +248,7 @@ def main(argv: list[str]):
     explanation_fragment = render_markdown(secs["explanation"])
     mail_date = extract_target_date(qfile) or datetime.now().strftime("%Y-%m-%d")
     composed = compose_email(question_fragment, explanation_fragment, mail_date)
+    composed.inline_images = dedupe_inline_images(composed.inline_images)
     emit_warnings(composed.warnings)
 
     if args.dry_run:
