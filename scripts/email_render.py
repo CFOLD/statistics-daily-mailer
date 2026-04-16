@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import base64
 import json
 import subprocess
+import sys
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
@@ -20,23 +23,60 @@ REPO_DIR = SCRIPT_DIR.parent
 MATH_IMAGE_RENDERER = SCRIPT_DIR / "render_math_images.js"
 
 
-def render_markdown(md: str) -> str:
-    if not md:
-        return ""
+@dataclass(frozen=True)
+class InlineImage:
+    cid: str
+    filename: str
+    mime_type: str
+    content: bytes
 
-    rendered_md = _render_math_images(md)
+    def as_data_uri(self) -> str:
+        encoded = base64.b64encode(self.content).decode("ascii")
+        return f"data:{self.mime_type};base64,{encoded}"
+
+
+@dataclass
+class RenderedFragment:
+    html: str
+    inline_images: list[InlineImage] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    def preview_html(self) -> str:
+        html = self.html
+        for image in self.inline_images:
+            html = html.replace(f"cid:{image.cid}", image.as_data_uri())
+        return html
+
+
+@dataclass
+class _MathRenderResult:
+    markdown: str
+    inline_images: list[InlineImage] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+def render_markdown(md: str) -> RenderedFragment:
+    if not md:
+        return RenderedFragment(html="")
+
+    math_result = _render_math_images(md)
+    rendered_md = math_result.markdown
     if MarkdownIt:
         html = MarkdownIt("commonmark", {"html": True, "breaks": True}).enable("table").render(rendered_md)
     else:
         parts = [p.strip() for p in rendered_md.split("\n\n") if p.strip()]
         html = "".join(f"<p>{p.replace(chr(10), '<br/>')}</p>" for p in parts)
 
-    return _style_html(html)
+    return RenderedFragment(
+        html=_style_html(html),
+        inline_images=math_result.inline_images,
+        warnings=math_result.warnings,
+    )
 
 
-def _render_math_images(md: str) -> str:
+def _render_math_images(md: str) -> _MathRenderResult:
     if not _can_render_math_images():
-        return md
+        return _MathRenderResult(markdown=md, warnings=["Math image renderer unavailable; leaving LaTeX unchanged."])
 
     payload = json.dumps({"text": md}, ensure_ascii=False)
     try:
@@ -48,15 +88,37 @@ def _render_math_images(md: str) -> str:
             check=True,
             cwd=str(REPO_DIR),
         )
-    except Exception:
-        return md
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        msg = "Math image renderer failed; leaving LaTeX unchanged."
+        if stderr:
+            msg = f"{msg} Renderer stderr: {stderr}"
+        return _MathRenderResult(markdown=md, warnings=[msg])
+    except Exception as exc:
+        return _MathRenderResult(markdown=md, warnings=[f"Math image renderer failed to start; leaving LaTeX unchanged. {exc}"])
 
     try:
         data = json.loads(proc.stdout)
-    except Exception:
-        return md
+    except Exception as exc:
+        return _MathRenderResult(markdown=md, warnings=[f"Math image renderer returned invalid JSON; leaving LaTeX unchanged. {exc}"])
 
-    return str(data.get("markdown") or md)
+    markdown = str(data.get("markdown") or md)
+    warnings = [str(item) for item in (data.get("warnings") or []) if str(item).strip()]
+    inline_images: list[InlineImage] = []
+    for item in data.get("images") or []:
+        try:
+            inline_images.append(
+                InlineImage(
+                    cid=str(item["cid"]),
+                    filename=str(item["filename"]),
+                    mime_type=str(item.get("mime_type") or "image/png"),
+                    content=base64.b64decode(item["data_base64"]),
+                )
+            )
+        except Exception as exc:
+            warnings.append(f"Skipping invalid rendered math image payload. {exc}")
+
+    return _MathRenderResult(markdown=markdown, inline_images=inline_images, warnings=warnings)
 
 
 @lru_cache(maxsize=1)
@@ -65,7 +127,7 @@ def _can_render_math_images() -> bool:
         return False
     try:
         proc = subprocess.run(
-            ["node", "-e", "require('texsvg'); process.stdout.write('ok')"],
+            ["node", "-e", "require('texsvg'); require('sharp'); process.stdout.write('ok')"],
             text=True,
             capture_output=True,
             cwd=str(REPO_DIR),
@@ -129,3 +191,9 @@ def _style_html(html: str) -> str:
 def _append_style(tag, style: str) -> None:
     base = tag.get("style", "")
     tag["style"] = f"{base}; {style}" if base else style
+
+
+if __name__ == "__main__":
+    sample = "Value: $x^2$\n\n$$\\frac{1}{2}$$"
+    result = render_markdown(sample)
+    sys.stdout.write(result.preview_html())

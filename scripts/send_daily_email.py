@@ -2,8 +2,9 @@
 """Daily email sender.
 
 Loads `templates/daily_email.html`, renders question markdown to HTML,
-and sends via SMTP. Uses markdown-it-py / beautifulsoup4 for markdown,
-and a dedicated local native-SVG renderer for math expressions.
+and sends via SMTP. Markdown is converted to email-friendly HTML, while
+LaTeX expressions are rendered at send time into PNG inline attachments
+referenced from the HTML with CID URLs.
 
 Usage: python scripts/send_daily_email.py [--file PATH] [--dry-run]
 """
@@ -12,7 +13,9 @@ from __future__ import annotations
 import os
 import re
 import sys
+from dataclasses import dataclass, field
 from datetime import date, datetime
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -24,7 +27,7 @@ try:
 except Exception:
     holidays = None
 
-from email_render import render_markdown
+from email_render import InlineImage, RenderedFragment, render_markdown
 
 BASE = Path(__file__).resolve().parents[1]
 TEMPLATE_PATH = BASE / "templates" / "daily_email.html"
@@ -44,6 +47,19 @@ DEFAULTS = {
 
 SECTION_RE = re.compile(r"^(#{2,6})\s+(.+?)\s*$", re.I | re.M)
 DATE_FROM_FILENAME_RE = re.compile(r"_(\d{8})\.md$")
+
+
+@dataclass
+class ComposedEmail:
+    html: str
+    inline_images: list[InlineImage] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    def preview_html(self) -> str:
+        html = self.html
+        for image in self.inline_images:
+            html = html.replace(f"cid:{image.cid}", image.as_data_uri())
+        return html
 
 
 def find_question() -> Path | None:
@@ -80,8 +96,8 @@ def parse_sections(content: str) -> dict:
             sections[current] += ln + "\n"
     if not sections["question"] and not sections["explanation"]:
         sections["question"] = content
-    for k in ("question", "explanation"):
-        sections[k] = sections[k].strip()
+    for key in ("question", "explanation"):
+        sections[key] = sections[key].strip()
     return sections
 
 
@@ -118,18 +134,30 @@ def open_smtp():
     return smtplib.SMTP(host, port)
 
 
-def send_email(html: str, subject: str):
+def send_email(composed: ComposedEmail, subject: str):
     username = os.getenv("SMTP_USERNAME")
     password = os.getenv("SMTP_PASSWORD")
     recipients = [e.strip() for e in os.getenv("EMAIL_RECIPIENTS", "").split(",") if e.strip()]
     if not recipients:
         raise RuntimeError("EMAIL_RECIPIENTS not set")
 
-    msg = MIMEMultipart("alternative")
+    msg = MIMEMultipart("related")
     msg["Subject"] = subject
     msg["From"] = username or "noreply@example.com"
     msg["To"] = ", ".join(recipients)
-    msg.attach(MIMEText(html, "html", "utf-8"))
+
+    alternative = MIMEMultipart("alternative")
+    alternative.attach(MIMEText(composed.html, "html", "utf-8"))
+    msg.attach(alternative)
+
+    for image in composed.inline_images:
+        maintype, subtype = image.mime_type.split("/", 1)
+        if maintype != "image":
+            raise ValueError(f"Unsupported inline image type: {image.mime_type}")
+        part = MIMEImage(image.content, _subtype=subtype)
+        part.add_header("Content-ID", f"<{image.cid}>")
+        part.add_header("Content-Disposition", "inline", filename=image.filename)
+        msg.attach(part)
 
     with open_smtp() as s:
         if int(os.getenv("SMTP_PORT", 587)) != 465:
@@ -161,6 +189,26 @@ def build_blocks(question_html: str, explanation_html: str, accent: str) -> str:
     """
 
 
+def compose_email(question_fragment: RenderedFragment, explanation_fragment: RenderedFragment, mail_date: str) -> ComposedEmail:
+    tpl = load_template()
+    vars = DEFAULTS.copy()
+    vars.update({
+        "content_blocks": build_blocks(question_fragment.html, explanation_fragment.html, DEFAULTS["accent"]),
+        "subhead": mail_date,
+    })
+    html = tpl.safe_substitute(vars)
+    return ComposedEmail(
+        html=html,
+        inline_images=[*question_fragment.inline_images, *explanation_fragment.inline_images],
+        warnings=[*question_fragment.warnings, *explanation_fragment.warnings],
+    )
+
+
+def emit_warnings(warnings: list[str]) -> None:
+    for warning in warnings:
+        print(f"[warn] {warning}", file=sys.stderr)
+
+
 def main(argv: list[str]):
     import argparse
 
@@ -174,7 +222,6 @@ def main(argv: list[str]):
         print(f"Skipping send for non-business day: {today.isoformat()}")
         return
 
-    tpl = load_template()
     qfile = Path(args.file) if args.file else find_question()
     if qfile is None:
         print("No question file found for today; skipping send.")
@@ -182,25 +229,21 @@ def main(argv: list[str]):
 
     content = qfile.read_text(encoding="utf-8")
     secs = parse_sections(content)
-    question_html = render_markdown(secs["question"])
-    explanation_html = render_markdown(secs["explanation"])
-
+    question_fragment = render_markdown(secs["question"])
+    explanation_fragment = render_markdown(secs["explanation"])
     mail_date = extract_target_date(qfile) or datetime.now().strftime("%Y-%m-%d")
-    vars = DEFAULTS.copy()
-    vars.update({
-        "content_blocks": build_blocks(question_html, explanation_html, DEFAULTS["accent"]),
-        "subhead": mail_date,
-    })
-    tpl_html = tpl.safe_substitute(vars)
+    composed = compose_email(question_fragment, explanation_fragment, mail_date)
+    emit_warnings(composed.warnings)
 
     if args.dry_run:
         out = Path.home() / "email_preview_statistics.html"
-        out.write_text(tpl_html, encoding="utf-8")
+        out.write_text(composed.preview_html(), encoding="utf-8")
         print("Wrote preview to", out)
+        print(f"Inline images: {len(composed.inline_images)}")
         return
 
     subject = f"{DEFAULTS['title']} ({mail_date})"
-    send_email(tpl_html, subject)
+    send_email(composed, subject)
     print("Sent email")
 
 

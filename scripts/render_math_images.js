@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+const crypto = require('crypto');
+const sharp = require('sharp');
 const texsvg = require('texsvg');
 
 let input = '';
@@ -11,15 +13,17 @@ process.stdin.on('end', async () => {
     const payload = JSON.parse(input || '{}');
     const text = String(payload.text || '');
     const cache = new Map();
-    const rendered = await renderMathMarkdown(text, cache);
-    process.stdout.write(JSON.stringify({ markdown: rendered }));
+    const images = [];
+    const warnings = [];
+    const rendered = await renderMathMarkdown(text, { cache, images, warnings });
+    process.stdout.write(JSON.stringify({ markdown: rendered, images, warnings }));
   } catch (err) {
     process.stderr.write(String((err && err.stack) || err));
     process.exitCode = 1;
   }
 });
 
-async function renderMathMarkdown(text, cache) {
+async function renderMathMarkdown(text, context) {
   let out = '';
   let i = 0;
   while (i < text.length) {
@@ -27,7 +31,7 @@ async function renderMathMarkdown(text, cache) {
       const end = findClosing(text, i + 2, '$$');
       if (end !== -1) {
         const expr = text.slice(i + 2, end);
-        out += await buildImageTag(expr, true, cache);
+        out += await buildImageTag(expr, true, context);
         i = end + 2;
         continue;
       }
@@ -36,7 +40,7 @@ async function renderMathMarkdown(text, cache) {
       const end = findClosing(text, i + 2, '\\]');
       if (end !== -1) {
         const expr = text.slice(i + 2, end);
-        out += await buildImageTag(expr, true, cache);
+        out += await buildImageTag(expr, true, context);
         i = end + 2;
         continue;
       }
@@ -45,7 +49,7 @@ async function renderMathMarkdown(text, cache) {
       const end = findClosing(text, i + 2, '\\)');
       if (end !== -1) {
         const expr = text.slice(i + 2, end);
-        out += await buildImageTag(expr, false, cache);
+        out += await buildImageTag(expr, false, context);
         i = end + 2;
         continue;
       }
@@ -54,7 +58,7 @@ async function renderMathMarkdown(text, cache) {
       const end = findInlineDollarEnd(text, i + 1);
       if (end !== -1) {
         const expr = text.slice(i + 1, end);
-        out += await buildImageTag(expr, false, cache);
+        out += await buildImageTag(expr, false, context);
         i = end + 1;
         continue;
       }
@@ -65,27 +69,56 @@ async function renderMathMarkdown(text, cache) {
   return out;
 }
 
-async function buildImageTag(expr, displayMode, cache) {
+async function buildImageTag(expr, displayMode, context) {
   const normalized = expr.trim();
   if (!normalized) {
     return displayMode ? '\n' : '';
   }
+
   const key = `${displayMode ? 'display' : 'inline'}:${normalized}`;
-  let dataUri = cache.get(key);
-  if (!dataUri) {
-    dataUri = await renderExpressionSvgDataUri(normalized);
-    cache.set(key, dataUri);
+  let image = context.cache.get(key);
+  if (!image) {
+    try {
+      image = await renderExpressionPng(normalized, displayMode);
+      context.cache.set(key, image);
+      context.images.push({
+        cid: image.cid,
+        filename: image.filename,
+        mime_type: 'image/png',
+        data_base64: image.dataBase64,
+      });
+    } catch (err) {
+      context.warnings.push(`Failed to render math expression as PNG: ${normalized.slice(0, 120)} (${String(err.message || err)})`);
+      return displayMode ? `\n$$${normalized}$$\n` : `$${normalized}$`;
+    }
   }
-  const alt = escapeHtml(normalized);
+
+  const alt = displayMode ? 'displayed equation' : 'equation';
+  const sizeAttrs = image.width && image.height
+    ? ` width="${image.width}" height="${image.height}"`
+    : '';
+
   if (displayMode) {
-    return `\n<div style="margin:12px 0; text-align:center;"><img src="${dataUri}" alt="${alt}" style="display:block; margin:0 auto; max-width:100%; height:auto;" /></div>\n`;
+    return `\n<div style="margin:12px 0; text-align:center;"><img src="cid:${image.cid}" alt="${alt}"${sizeAttrs} style="display:block; margin:0 auto; max-width:100%; height:auto;" /></div>\n`;
   }
-  return `<img src="${dataUri}" alt="${alt}" style="display:inline-block; vertical-align:middle; height:auto; max-width:100%;" />`;
+  return `<img src="cid:${image.cid}" alt="${alt}"${sizeAttrs} style="display:inline-block; vertical-align:middle; max-width:100%; height:auto;" />`;
 }
 
-async function renderExpressionSvgDataUri(expr) {
+async function renderExpressionPng(expr, displayMode) {
   const svg = await texsvg(expr);
-  return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
+  const density = displayMode ? 288 : 240;
+  const image = sharp(Buffer.from(svg, 'utf8'), { density });
+  const pngBuffer = await image.png().toBuffer();
+  const metadata = await sharp(pngBuffer).metadata();
+  const hash = crypto.createHash('sha1').update(`${displayMode ? 'd' : 'i'}:${expr}`).digest('hex').slice(0, 16);
+
+  return {
+    cid: `math-${hash}`,
+    filename: `math-${hash}.png`,
+    dataBase64: pngBuffer.toString('base64'),
+    width: metadata.width || undefined,
+    height: metadata.height || undefined,
+  };
 }
 
 function findClosing(text, start, token) {
@@ -111,13 +144,4 @@ function findInlineDollarEnd(text, start) {
     i += 1;
   }
   return -1;
-}
-
-function escapeHtml(value) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }

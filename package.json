@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Daily statistics email renderer",
   "dependencies": {
+    "sharp": "^0.34.4",
     "texsvg": "^3.0.3"
   }
 }
