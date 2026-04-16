@@ -127,14 +127,14 @@ function buildInlineImageStyle(image) {
   ];
 
   if (metrics.height) {
-    pieces.push(`height:${metrics.height}`);
+    pieces.push(`height:${scaleMetric(metrics.height, 0.9)}`);
   } else {
-    pieces.push('height:1.4em');
+    pieces.push('height:1.26em');
   }
   if (metrics.verticalAlign) {
-    pieces.push(`vertical-align:${metrics.verticalAlign}`);
+    pieces.push(`vertical-align:${scaleMetric(metrics.verticalAlign, 0.9)}`);
   } else {
-    pieces.push('vertical-align:-0.15em');
+    pieces.push('vertical-align:-0.135em');
   }
   return pieces.join('; ');
 }
@@ -179,6 +179,21 @@ function normalizeMetric(value) {
     return '';
   }
   return trimmed.replace(/\s+/g, '');
+}
+
+function scaleMetric(value, factor) {
+  const normalized = normalizeMetric(value);
+  const match = normalized.match(/^(-?\d*\.?\d+)([a-z%]+)$/i);
+  if (!match) {
+    return normalized;
+  }
+  const number = Number(match[1]);
+  const unit = match[2];
+  if (!Number.isFinite(number)) {
+    return normalized;
+  }
+  const scaled = Math.round(number * factor * 1000) / 1000;
+  return `${scaled}${unit}`;
 }
 
 function findClosing(text, start, token) {
