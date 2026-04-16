@@ -94,14 +94,12 @@ async function buildImageTag(expr, displayMode, context) {
   }
 
   const alt = displayMode ? 'displayed equation' : 'equation';
-  const sizeAttrs = image.width && image.height
-    ? ` width="${image.width}" height="${image.height}"`
-    : '';
+  const style = displayMode ? buildDisplayImageStyle(image) : buildInlineImageStyle(image);
 
   if (displayMode) {
-    return `\n<div style="margin:12px 0; text-align:center;"><img src="cid:${image.cid}" alt="${alt}"${sizeAttrs} style="display:block; margin:0 auto; max-width:100%; height:auto;" /></div>\n`;
+    return `\n<div style="margin:12px 0; text-align:center;"><img src="cid:${image.cid}" alt="${alt}" style="${style}" /></div>\n`;
   }
-  return `<img src="cid:${image.cid}" alt="${alt}"${sizeAttrs} style="display:inline-block; vertical-align:middle; max-width:100%; height:auto;" />`;
+  return `<img src="cid:${image.cid}" alt="${alt}" style="${style}" />`;
 }
 
 async function renderExpressionPng(expr, displayMode) {
@@ -109,16 +107,78 @@ async function renderExpressionPng(expr, displayMode) {
   const density = displayMode ? 288 : 240;
   const image = sharp(Buffer.from(svg, 'utf8'), { density });
   const pngBuffer = await image.png().toBuffer();
-  const metadata = await sharp(pngBuffer).metadata();
   const hash = crypto.createHash('sha1').update(`${displayMode ? 'd' : 'i'}:${expr}`).digest('hex').slice(0, 16);
 
   return {
     cid: `math-${hash}`,
     filename: `math-${hash}.png`,
     dataBase64: pngBuffer.toString('base64'),
-    width: metadata.width || undefined,
-    height: metadata.height || undefined,
+    metrics: extractSvgMetrics(svg),
   };
+}
+
+function buildInlineImageStyle(image) {
+  const metrics = image.metrics || {};
+  const pieces = [
+    'display:inline-block',
+    'max-width:100%',
+    'width:auto',
+    'border:0',
+  ];
+
+  if (metrics.height) {
+    pieces.push(`height:${metrics.height}`);
+  } else {
+    pieces.push('height:1.4em');
+  }
+  if (metrics.verticalAlign) {
+    pieces.push(`vertical-align:${metrics.verticalAlign}`);
+  } else {
+    pieces.push('vertical-align:-0.15em');
+  }
+  return pieces.join('; ');
+}
+
+function buildDisplayImageStyle(image) {
+  const metrics = image.metrics || {};
+  const pieces = [
+    'display:block',
+    'margin:0 auto',
+    'max-width:100%',
+    'height:auto',
+    'border:0',
+  ];
+
+  if (metrics.width) {
+    pieces.push(`width:${metrics.width}`);
+  }
+  return pieces.join('; ');
+}
+
+function extractSvgMetrics(svg) {
+  const width = matchAttr(svg, 'width');
+  const height = matchAttr(svg, 'height');
+  const style = matchAttr(svg, 'style');
+  const verticalAlignMatch = style ? style.match(/vertical-align\s*:\s*([^;]+)/i) : null;
+  return {
+    width: normalizeMetric(width),
+    height: normalizeMetric(height),
+    verticalAlign: normalizeMetric(verticalAlignMatch ? verticalAlignMatch[1] : ''),
+  };
+}
+
+function matchAttr(svg, name) {
+  const re = new RegExp(`${name}="([^"]+)"`, 'i');
+  const match = svg.match(re);
+  return match ? match[1] : '';
+}
+
+function normalizeMetric(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  return trimmed.replace(/\s+/g, '');
 }
 
 function findClosing(text, start, token) {
