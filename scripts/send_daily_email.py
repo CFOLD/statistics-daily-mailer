@@ -14,18 +14,13 @@ import os
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import datetime
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from string import Template
 import smtplib
-
-try:
-    import holidays
-except Exception:
-    holidays = None
 
 from email_render import InlineImage, RenderedFragment, render_markdown
 
@@ -65,11 +60,7 @@ class ComposedEmail:
 def find_question() -> Path | None:
     today = datetime.now().strftime("%Y%m%d")
     today_matches = sorted(QUESTIONS_DIR.glob(f"*{today}*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if today_matches:
-        return today_matches[0]
-
-    fallback_matches = sorted(QUESTIONS_DIR.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return fallback_matches[0] if fallback_matches else None
+    return today_matches[0] if today_matches else None
 
 
 def parse_sections(content: str) -> dict:
@@ -117,15 +108,6 @@ def extract_target_date(path: Path) -> str | None:
         return datetime.strptime(match.group(1), "%Y%m%d").strftime("%Y-%m-%d")
     except ValueError:
         return None
-
-
-def is_kr_business_day(day: date) -> bool:
-    if day.weekday() >= 5:
-        return False
-    if holidays is None:
-        return True
-    kr_holidays = holidays.country_holidays("KR", years=[day.year])
-    return day not in kr_holidays
 
 
 def open_smtp():
@@ -231,11 +213,6 @@ def main(argv: list[str]):
     p.add_argument("--file", help="Markdown file to send")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args(argv)
-
-    today = datetime.now().date()
-    if not args.file and not args.dry_run and not is_kr_business_day(today):
-        print(f"Skipping send for non-business day: {today.isoformat()}")
-        return
 
     qfile = Path(args.file) if args.file else find_question()
     if qfile is None:

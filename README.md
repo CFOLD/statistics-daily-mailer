@@ -8,13 +8,13 @@ Question generation logic lives in the `statistics-question-creator` skill, and 
 ## What this repository does
 
 - Looks for a question markdown file in `questions/`
-- Prefers a file whose name includes today's date (`YYYYMMDD`)
-- Falls back to the most recent question file if no dated file matches today
+- Sends only a file whose name includes today's date (`YYYYMMDD`)
+- Exits successfully without sending if no file matches today
 - Converts the markdown question into email-friendly HTML
 - Renders supported LaTeX math locally into PNG inline attachments and references them from the email HTML with CID URLs
 - Sends the email through SMTP using GitHub Actions
 - Runs automatically every weekday at **09:00 Asia/Seoul**
-- Skips Korean public holidays during scheduled sends
+- Holiday/weekend behavior is controlled by whether a question file exists for that date
 
 ## Repository layout
 
@@ -47,7 +47,7 @@ This usually requires enabling 2-Step Verification on the Google account.
 GitHub Actions cron uses UTC.
 
 - `0 0 * * 1-5` UTC = `09:00` Asia/Seoul every weekday
-- The send script additionally skips Korean public holidays
+- If no `*_YYYYMMDD*.md` file exists for the run date, the send script exits successfully without sending
 
 ## Manual run
 
